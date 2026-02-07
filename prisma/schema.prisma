@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============ 枚举 ============
+
+enum BillType {
+  INCOME
+  EXPENSE
+}
+
+enum DataSource {
+  MANUAL
+  YIMU
+  OTHER
+}
+
+// ============ 分类表 ============
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(50)
+  type      BillType
+  icon      String?   @db.VarChar(50)
+  color     String?   @db.VarChar(20)
+  sort      Int       @default(0)
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  bills    Bill[]
+
+  @@index([parentId], name: "idx_category_parent")
+  @@index([deletedAt], name: "idx_category_deleted")
+  @@map("categories")
+}
+
+// ============ 标签表 ============
+
+model Tag {
+  id        String    @id @default(uuid())
+  name      String    @db.VarChar(50)
+  color     String?   @db.VarChar(20)
+  sort      Int       @default(0)
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  parent   Tag?      @relation("TagTree", fields: [parentId], references: [id])
+  children Tag[]     @relation("TagTree")
+  bills    BillTag[]
+
+  @@index([parentId], name: "idx_tag_parent")
+  @@index([deletedAt], name: "idx_tag_deleted")
+  @@map("tags")
+}
+
+// ============ 导入批次表 ============
+
+model ImportBatch {
+  id           String     @id @default(uuid())
+  fileName     String     @db.VarChar(255)
+  source       DataSource
+  totalCount   Int        @default(0)
+  successCount Int        @default(0)
+  failCount    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  bills Bill[]
+
+  @@map("import_batches")
+}
+
+// ============ 账单表 ============
+
+model Bill {
+  id            String     @id @default(uuid())
+  date          DateTime   @db.Date
+  type          BillType
+  amount        Decimal    @db.Decimal(12, 2)
+  discount      Decimal    @default(0) @db.Decimal(12, 2)
+  actualAmount  Decimal    @db.Decimal(12, 2)
+  remark        String?    @db.Text
+  source        DataSource @default(MANUAL)
+  categoryId    String?
+  importBatchId String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  category    Category?    @relation(fields: [categoryId], references: [id])
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id])
+  tags        BillTag[]
+
+  @@index([date], name: "idx_bill_date")
+  @@index([categoryId], name: "idx_bill_category")
+  @@index([type], name: "idx_bill_type")
+  @@index([deletedAt], name: "idx_bill_deleted")
+  @@index([importBatchId], name: "idx_bill_import_batch")
+  @@map("bills")
+}
+
+// ============ 账单-标签关联表 ============
+
+model BillTag {
+  billId String
+  tagId  String
+
+  bill Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([billId, tagId])
+  @@index([tagId], name: "idx_billtag_tag")
+  @@map("bill_tags")
+}
