@@ -27,8 +27,17 @@ interface EChartsWrapperProps {
   option: Record<string, unknown>
   style?: React.CSSProperties
   notMerge?: boolean
+  onEvents?: Record<string, (params?: unknown) => void>
 }
 
-export default function EChartsWrapper({ option, style, notMerge }: EChartsWrapperProps) {
-  return <ReactEChartsCore echarts={echarts} option={option} style={style} notMerge={notMerge} />
+export default function EChartsWrapper({ option, style, notMerge, onEvents }: EChartsWrapperProps) {
+  return (
+    <ReactEChartsCore
+      echarts={echarts}
+      option={option}
+      style={style}
+      notMerge={notMerge}
+      onEvents={onEvents}
+    />
+  )
 }
