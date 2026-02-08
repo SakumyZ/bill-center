@@ -33,6 +33,8 @@ export default function TagsPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [tags, setTags] = useState<TagNode[]>([])
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([])
+  const [expandAll, setExpandAll] = useState(true)
   const [flatTags, setFlatTags] = useState<TagNode[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -54,6 +56,15 @@ export default function TagsPage() {
   useEffect(() => {
     loadTags()
   }, [loadTags])
+
+  const getAllKeys = useCallback((nodes: TagNode[]): string[] => {
+    return nodes.flatMap(node => [node.id, ...(node.children ? getAllKeys(node.children) : [])])
+  }, [])
+
+  useEffect(() => {
+    const keys = getAllKeys(tags)
+    setExpandedKeys(expandAll ? keys : [])
+  }, [tags, expandAll, getAllKeys])
 
   const handleAdd = (parentId?: string) => {
     setEditingId(null)
@@ -88,6 +99,11 @@ export default function TagsPage() {
       const values = await form.validateFields()
       if (values.color && typeof values.color === 'object') {
         values.color = values.color.toHexString()
+      }
+
+      // 清理空的 parentId，避免传递空字符串导致 UUID 验证失败
+      if (!values.parentId) {
+        delete values.parentId
       }
 
       let res
@@ -166,24 +182,46 @@ export default function TagsPage() {
     ))
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-          新增标签
-        </Button>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          marginBottom: 12,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          background: '#fff',
+          paddingBottom: 12
+        }}
+      >
+        <Space>
+          <Button onClick={() => setExpandAll(prev => !prev)}>
+            {expandAll ? '全部折叠' : '全部展开'}
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
+            新增标签
+          </Button>
+        </Space>
       </div>
 
-      <Card>
-        <Spin spinning={loading}>
-          {tags.length > 0 ? (
-            <Tree defaultExpandAll showLine>
-              {renderTreeNodes(tags)}
-            </Tree>
-          ) : (
-            <Empty description="暂无标签数据" />
-          )}
-        </Spin>
-      </Card>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <Card style={{ height: '100%' }}>
+          <Spin spinning={loading}>
+            {tags.length > 0 ? (
+              <Tree
+                showLine
+                expandedKeys={expandedKeys}
+                onExpand={keys => setExpandedKeys(keys as string[])}
+              >
+                {renderTreeNodes(tags)}
+              </Tree>
+            ) : (
+              <Empty description="暂无标签数据" />
+            )}
+          </Spin>
+        </Card>
+      </div>
 
       <Modal
         title={editingId ? '编辑标签' : '新增标签'}

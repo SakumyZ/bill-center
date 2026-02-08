@@ -8,7 +8,7 @@ export const createCategorySchema = z.object({
   icon: z.string().max(50).optional().nullable(),
   color: z.string().max(20).optional().nullable(),
   sort: z.number().int().min(0).optional().default(0),
-  parentId: z.string().uuid().optional().nullable()
+  parentId: z.string().min(1).optional().nullable()
 })
 
 export const updateCategorySchema = createCategorySchema.partial()
@@ -22,7 +22,7 @@ export const createTagSchema = z.object({
   name: z.string().min(1, '标签名称不能为空').max(50, '标签名称不能超过50个字符'),
   color: z.string().max(20).optional().nullable(),
   sort: z.number().int().min(0).optional().default(0),
-  parentId: z.string().uuid().optional().nullable()
+  parentId: z.string().min(1).optional().nullable()
 })
 
 export const updateTagSchema = createTagSchema.partial()
@@ -40,8 +40,8 @@ export const createBillSchema = z.object({
   actualAmount: z.number().optional(),
   remark: z.string().optional().nullable(),
   source: z.enum(['MANUAL', 'YIMU', 'OTHER']).optional().default('MANUAL'),
-  categoryId: z.string().uuid().optional().nullable(),
-  tagIds: z.array(z.string().uuid()).optional().default([])
+  categoryId: z.string().min(1).optional().nullable(),
+  tagIds: z.array(z.string().min(1)).optional().default([])
 })
 
 export const updateBillSchema = createBillSchema.partial()

@@ -56,7 +56,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onCollapse={setCollapsed}
         theme="light"
         style={{
-          borderRight: '1px solid #f0f0f0'
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          height: '100vh',
+          overflow: 'auto',
+          borderRight: '1px solid #f0f0f0',
+          zIndex: 100
         }}
       >
         <div
@@ -88,9 +95,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           style={{ borderRight: 0 }}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ marginLeft: collapsed ? 80 : 200, transition: 'margin-left 0.2s' }}>
         <Header
           style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 99,
             background: '#fff',
             padding: '0 24px',
             borderBottom: '1px solid #f0f0f0',
@@ -108,11 +118,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             padding: 24,
             background: '#fff',
             borderRadius: 8,
-            minHeight: 280,
-            overflow: 'auto'
+            height: 'calc(100vh - 112px)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          {children}
+          <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
         </Content>
       </Layout>
     </Layout>

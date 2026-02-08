@@ -36,6 +36,8 @@ export default function CategoriesPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [categories, setCategories] = useState<CategoryNode[]>([])
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([])
+  const [expandAll, setExpandAll] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [parentId, setParentId] = useState<string | null>(null)
@@ -62,6 +64,15 @@ export default function CategoriesPage() {
   useEffect(() => {
     loadCategories()
   }, [loadCategories])
+
+  const getAllKeys = useCallback((nodes: CategoryNode[]): string[] => {
+    return nodes.flatMap(node => [node.id, ...(node.children ? getAllKeys(node.children) : [])])
+  }, [])
+
+  useEffect(() => {
+    const keys = getAllKeys(categories)
+    setExpandedKeys(expandAll ? keys : [])
+  }, [categories, expandAll, getAllKeys])
 
   const handleAdd = (pId?: string) => {
     setEditingId(null)
@@ -101,6 +112,11 @@ export default function CategoriesPage() {
       // 处理颜色值
       if (values.color && typeof values.color === 'object') {
         values.color = values.color.toHexString()
+      }
+
+      // 清理空的 parentId，避免传递空字符串导致 UUID 验证失败
+      if (!values.parentId) {
+        delete values.parentId
       }
 
       let res
@@ -179,8 +195,19 @@ export default function CategoriesPage() {
     ))
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          marginBottom: 12,
+          display: 'flex',
+          justifyContent: 'space-between',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          background: '#fff',
+          paddingBottom: 12
+        }}
+      >
         <Space>
           <Tag.CheckableTag
             checked={activeType === 'EXPENSE'}
@@ -195,22 +222,33 @@ export default function CategoriesPage() {
             收入分类
           </Tag.CheckableTag>
         </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-          新增分类
-        </Button>
+        <Space>
+          <Button onClick={() => setExpandAll(prev => !prev)}>
+            {expandAll ? '全部折叠' : '全部展开'}
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
+            新增分类
+          </Button>
+        </Space>
       </div>
 
-      <Card>
-        <Spin spinning={loading}>
-          {categories.length > 0 ? (
-            <Tree defaultExpandAll showLine>
-              {renderTreeNodes(categories)}
-            </Tree>
-          ) : (
-            <Empty description="暂无分类数据" />
-          )}
-        </Spin>
-      </Card>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        <Card style={{ height: '100%' }}>
+          <Spin spinning={loading}>
+            {categories.length > 0 ? (
+              <Tree
+                showLine
+                expandedKeys={expandedKeys}
+                onExpand={keys => setExpandedKeys(keys as string[])}
+              >
+                {renderTreeNodes(categories)}
+              </Tree>
+            ) : (
+              <Empty description="暂无分类数据" />
+            )}
+          </Spin>
+        </Card>
+      </div>
 
       <Modal
         title={editingId ? '编辑分类' : '新增分类'}

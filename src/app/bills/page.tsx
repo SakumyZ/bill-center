@@ -67,6 +67,7 @@ export default function BillsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [form] = Form.useForm()
   const [filterForm] = Form.useForm()
 
@@ -165,6 +166,31 @@ export default function BillsPage() {
     }
   }
 
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请选择要删除的账单')
+      return
+    }
+
+    try {
+      const deletePromises = selectedRowKeys.map(id => deleteBill(id as string))
+      const results = await Promise.all(deletePromises)
+      const successCount = results.filter(r => r.success).length
+      const failCount = results.length - successCount
+
+      if (failCount === 0) {
+        message.success(`成功删除 ${successCount} 条账单`)
+      } else {
+        message.warning(`删除完成：成功 ${successCount} 条，失败 ${failCount} 条`)
+      }
+
+      setSelectedRowKeys([])
+      loadBills()
+    } catch {
+      message.error('批量删除失败')
+    }
+  }
+
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
@@ -172,6 +198,14 @@ export default function BillsPage() {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
         actualAmount: values.actualAmount ?? values.amount - (values.discount || 0)
+      }
+
+      // 清理空的 categoryId 和 tagIds，避免 UUID 验证失败
+      if (!data.categoryId) {
+        delete data.categoryId
+      }
+      if (!data.tagIds || data.tagIds.length === 0) {
+        delete data.tagIds
       }
 
       let res
@@ -279,7 +313,7 @@ export default function BillsPage() {
   ]
 
   return (
-    <div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 筛选栏 */}
       <div style={{ marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 8 }}>
         <Form form={filterForm} layout="inline" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -323,7 +357,23 @@ export default function BillsPage() {
       </div>
 
       {/* 操作栏 */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+        <Space>
+          {selectedRowKeys.length > 0 && (
+            <>
+              <span>已选择 {selectedRowKeys.length} 项</span>
+              <Popconfirm
+                title="确认删除"
+                description={`确定要删除选中的 ${selectedRowKeys.length} 条账单吗？`}
+                onConfirm={handleBatchDelete}
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  批量删除
+                </Button>
+              </Popconfirm>
+            </>
+          )}
+        </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
           新增账单
         </Button>
@@ -335,6 +385,11 @@ export default function BillsPage() {
         dataSource={bills}
         rowKey="id"
         loading={loading}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+          selections: [Table.SELECTION_ALL, Table.SELECTION_INVERT, Table.SELECTION_NONE]
+        }}
         pagination={{
           current: pagination.page,
           pageSize: pagination.pageSize,
@@ -342,9 +397,12 @@ export default function BillsPage() {
           showSizeChanger: true,
           showQuickJumper: true,
           showTotal: total => `共 ${total} 条`,
-          onChange: (page, pageSize) => setPagination({ ...pagination, page, pageSize })
+          onChange: (page, pageSize) => {
+            setPagination({ ...pagination, page, pageSize })
+            setSelectedRowKeys([])
+          }
         }}
-        scroll={{ x: 1000 }}
+        scroll={{ x: 1000, y: 'calc(100vh - 400px)' }}
       />
 
       {/* 新增/编辑弹窗 */}

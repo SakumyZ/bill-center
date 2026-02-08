@@ -485,7 +485,7 @@ export default function UploadPage() {
             dataSource={previewBills}
             rowKey={(_, index) => String(index)}
             size="small"
-            scroll={{ x: 900 }}
+            scroll={{ x: 900, y: 'calc(100vh - 350px)' }}
             pagination={{ pageSize: 50 }}
           />
         </div>
