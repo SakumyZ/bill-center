@@ -44,9 +44,18 @@ interface PreviewBill {
   discount: number
   actualAmount: number
   remark: string
+  // 解析器返回的原始字段（用于自动匹配）
   categoryName?: string
+  subCategoryName?: string
+  tagNames?: string[]
+  // 第三方原始数据（仅用于显示，不存数据库）
+  originalCategoryName?: string // 一级分类
+  originalSubCategoryName?: string // 二级分类
+  originalTagNames?: string[] // 原始标签列表
+  // 本系统映射后的 ID
   categoryId?: string
   tagIds?: string[]
+  // AI 分析结果
   aiCategoryId?: string
   aiCategoryName?: string
   aiTagIds?: string[]
@@ -83,18 +92,94 @@ export default function UploadPage() {
       setCategoryTree(convertToTreeSelectData(catRes.data as Record<string, unknown>[]))
     if (tagRes.success)
       setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
+    return {
+      categories: catRes.data as Record<string, unknown>[],
+      tags: tagRes.data as Record<string, unknown>[]
+    }
   }, [])
+
+  // 递归查找分类（支持按名称匹配）
+  const findCategoryByName = (
+    categories: Record<string, unknown>[],
+    name: string,
+    type?: string
+  ): string | undefined => {
+    for (const cat of categories) {
+      if (cat.name === name && (!type || cat.type === type)) {
+        return cat.id as string
+      }
+      if (cat.children && Array.isArray(cat.children)) {
+        const found = findCategoryByName(cat.children as Record<string, unknown>[], name, type)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  // 递归查找标签（支持按名称匹配）
+  const findTagsByNames = (tags: Record<string, unknown>[], names: string[]): string[] => {
+    const result: string[] = []
+    for (const name of names) {
+      for (const tag of tags) {
+        if (tag.name === name) {
+          result.push(tag.id as string)
+          break
+        }
+        if (tag.children && Array.isArray(tag.children)) {
+          const found = findTagsByNames(tag.children as Record<string, unknown>[], [name])
+          if (found.length > 0) {
+            result.push(...found)
+            break
+          }
+        }
+      }
+    }
+    return result
+  }
 
   const handleUpload = async (file: File) => {
     try {
-      await loadMetadata()
+      const metadata = await loadMetadata()
       const res = await previewUpload(file, source)
       if (res.success) {
         setFileName(res.data.fileName)
-        setPreviewBills(res.data.bills)
+
+        // 自动匹配分类和标签
+        const billsWithMapping = (res.data.bills as PreviewBill[]).map(bill => {
+          let categoryId: string | undefined = undefined
+          let tagIds: string[] = []
+
+          // 优先匹配二级分类，如果没有则匹配一级分类
+          if (bill.subCategoryName) {
+            categoryId = findCategoryByName(metadata.categories, bill.subCategoryName, bill.type)
+          }
+          if (!categoryId && bill.categoryName) {
+            categoryId = findCategoryByName(metadata.categories, bill.categoryName, bill.type)
+          }
+
+          // 匹配标签
+          if (bill.tagNames && bill.tagNames.length > 0) {
+            tagIds = findTagsByNames(metadata.tags, bill.tagNames)
+          }
+
+          return {
+            ...bill,
+            originalCategoryName: bill.categoryName,
+            originalSubCategoryName: bill.subCategoryName,
+            originalTagNames: bill.tagNames,
+            categoryId,
+            tagIds: tagIds.length > 0 ? tagIds : undefined
+          }
+        })
+
+        setPreviewBills(billsWithMapping)
         setErrors(res.data.errors || [])
         setCurrentStep(1)
-        message.success(`解析成功，共 ${res.data.bills.length} 条记录`)
+
+        const matchedCount = billsWithMapping.filter(b => b.categoryId || b.tagIds?.length).length
+        message.success(
+          `解析成功，共 ${billsWithMapping.length} 条记录，自动匹配 ${matchedCount} 条`
+        )
       } else {
         message.error(res.error || '解析失败')
       }
@@ -106,15 +191,42 @@ export default function UploadPage() {
 
   const handleAIAnalyze = async () => {
     if (previewBills.length === 0) return
+
+    // 过滤出需要 AI 分析的账单（没有分类或标签的）
+    const needAnalysis: Array<{ bill: PreviewBill; originalIndex: number }> = []
+    previewBills.forEach((bill, index) => {
+      const hasCategory = !!bill.categoryId
+      const hasTags = bill.tagIds && bill.tagIds.length > 0
+      // 只分析没有分类或标签的记录
+      if (!hasCategory || !hasTags) {
+        needAnalysis.push({ bill, originalIndex: index })
+      }
+    })
+
+    if (needAnalysis.length === 0) {
+      message.info('所有账单已有分类和标签，无需 AI 分析')
+      return
+    }
+
     setAnalyzingAI(true)
     try {
-      const billsForAI = previewBills.map(b => ({
-        remark: b.remark,
-        amount: b.amount,
-        type: b.type
+      // 只发送需要分析的账单给 AI
+      const billsForAI = needAnalysis.map((item, idx) => ({
+        index: idx, // AI 返回时使用的索引
+        originalIndex: item.originalIndex, // 原始索引，用于映射回去
+        remark: item.bill.remark,
+        amount: item.bill.amount,
+        type: item.bill.type
       }))
 
-      const res = await analyzeWithAI(billsForAI)
+      const res = await analyzeWithAI(
+        billsForAI.map(b => ({
+          remark: b.remark,
+          amount: b.amount,
+          type: b.type
+        }))
+      )
+
       if (res.success && Array.isArray(res.data)) {
         const updated = [...previewBills]
         for (const suggestion of res.data as Array<{
@@ -125,25 +237,33 @@ export default function UploadPage() {
           tagNames?: string[]
           confidence?: number
         }>) {
-          const idx = suggestion.index
-          if (idx >= 0 && idx < updated.length) {
-            updated[idx] = {
-              ...updated[idx],
+          // 通过映射找到原始索引
+          const mapping = billsForAI[suggestion.index]
+          if (mapping) {
+            const originalIdx = mapping.originalIndex
+            updated[originalIdx] = {
+              ...updated[originalIdx],
               aiCategoryId: suggestion.categoryId,
               aiCategoryName: suggestion.categoryName,
               aiTagIds: suggestion.tagIds,
               aiTagNames: suggestion.tagNames,
               aiConfidence: suggestion.confidence,
-              // 自动应用 AI 推荐
-              categoryId: suggestion.categoryId || updated[idx].categoryId,
-              tagIds: suggestion.tagIds?.length ? suggestion.tagIds : updated[idx].tagIds
+              // 自动应用 AI 推荐（只覆盖空值）
+              categoryId: suggestion.categoryId || updated[originalIdx].categoryId,
+              tagIds:
+                suggestion.tagIds?.length && suggestion.tagIds.length > 0
+                  ? suggestion.tagIds
+                  : updated[originalIdx].tagIds
             }
           }
         }
         setPreviewBills(updated)
-        message.success('AI 分析完成')
+        message.success(
+          `AI 分析完成，处理 ${needAnalysis.length} 条记录（跳过 ${previewBills.length - needAnalysis.length} 条已有分类标签的记录）`
+        )
       } else {
         message.error(res.error || 'AI 分析失败')
+        console.log(res.error)
       }
     } catch {
       message.error('AI 分析失败')
@@ -219,7 +339,41 @@ export default function UploadPage() {
       title: '备注',
       dataIndex: 'remark',
       key: 'remark',
+      width: 150,
       ellipsis: true
+    },
+    {
+      title: '原分类',
+      key: 'originalCategory',
+      width: 120,
+      render: (_: unknown, record: PreviewBill) => (
+        <div style={{ fontSize: 12 }}>
+          {record.originalCategoryName && (
+            <div style={{ color: '#666' }}>{record.originalCategoryName}</div>
+          )}
+          {record.originalSubCategoryName && (
+            <div style={{ color: '#999', fontSize: 11 }}>└ {record.originalSubCategoryName}</div>
+          )}
+        </div>
+      )
+    },
+    {
+      title: '原标签',
+      key: 'originalTags',
+      width: 120,
+      render: (_: unknown, record: PreviewBill) => (
+        <div>
+          {record.originalTagNames && record.originalTagNames.length > 0 && (
+            <Space size={[4, 4]} wrap>
+              {record.originalTagNames.map((tag, idx) => (
+                <Tag key={idx} color="blue" style={{ fontSize: 11 }}>
+                  {tag}
+                </Tag>
+              ))}
+            </Space>
+          )}
+        </div>
+      )
     },
     {
       title: '分类',

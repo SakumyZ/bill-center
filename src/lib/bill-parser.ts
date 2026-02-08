@@ -12,6 +12,7 @@ export interface ParsedBill {
   actualAmount: number
   remark: string
   categoryName?: string
+  subCategoryName?: string // 二级分类
   tagNames?: string[]
 }
 
@@ -67,7 +68,10 @@ class YimuParser implements BillParser {
     const remark =
       this.getField(row, ['备注', '说明', '描述', 'remark', 'Remark', 'description']) || ''
     const categoryName = this.getField(row, ['分类', '类别', 'category', 'Category'])
+    const subCategoryName = this.getField(row, ['二级分类', '子分类', 'subcategory'])
     const discountStr = this.getField(row, ['优惠', '优惠金额', 'discount'])
+    const refundStr = this.getField(row, ['退款', 'refund']) // 退款字段
+    const tagsStr = this.getField(row, ['标签', 'tags', 'Tag'])
 
     if (!dateStr || !amountStr) {
       throw new Error(`缺少必要字段（日期/金额）`)
@@ -78,7 +82,14 @@ class YimuParser implements BillParser {
       throw new Error(`第 ${rowNum} 行金额格式错误: ${amountStr}`)
     }
 
-    const discount = discountStr ? Math.abs(parseFloat(String(discountStr))) : 0
+    // 优惠金额：优惠字段 + 退款金额（都取绝对值）
+    let discount = discountStr ? Math.abs(parseFloat(String(discountStr))) : 0
+    if (refundStr) {
+      const refund = Math.abs(parseFloat(String(refundStr)))
+      if (!isNaN(refund)) {
+        discount += refund
+      }
+    }
 
     // 判断收支类型
     let type: 'INCOME' | 'EXPENSE' = 'EXPENSE'
@@ -99,6 +110,13 @@ class YimuParser implements BillParser {
       dateValue = String(dateStr).trim().slice(0, 10)
     }
 
+    // 解析标签（支持逗号/分号/空格分隔）
+    const tagNames: string[] = []
+    if (tagsStr) {
+      const tagsString = String(tagsStr).trim()
+      tagNames.push(...tagsString.split(/[,;、\s]+/).filter(t => t.length > 0))
+    }
+
     return {
       date: dateValue,
       type,
@@ -106,7 +124,9 @@ class YimuParser implements BillParser {
       discount,
       actualAmount: amount - discount,
       remark: String(remark),
-      categoryName: categoryName ? String(categoryName) : undefined
+      categoryName: categoryName ? String(categoryName) : undefined,
+      subCategoryName: subCategoryName ? String(subCategoryName) : undefined,
+      tagNames: tagNames.length > 0 ? tagNames : undefined
     }
   }
 
