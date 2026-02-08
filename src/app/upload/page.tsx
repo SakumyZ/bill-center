@@ -281,7 +281,9 @@ export default function UploadPage() {
         bills: previewBills.map(b => ({
           ...b,
           categoryId: b.categoryId || undefined,
-          tagIds: b.tagIds || []
+          tagIds: (b.tagIds || [])
+            .map(v => (typeof v === 'string' ? v : (v as { value?: string }).value))
+            .filter((v): v is string => typeof v === 'string' && v.length > 0)
         }))
       })
 
@@ -299,9 +301,21 @@ export default function UploadPage() {
     }
   }
 
+  const normalizeTagIds = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) return undefined
+    const ids = value
+      .map(v => (typeof v === 'string' ? v : (v as { value?: string }).value))
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    return ids.length > 0 ? ids : undefined
+  }
+
   const handleBillChange = (index: number, field: string, value: unknown) => {
     const updated = [...previewBills]
-    updated[index] = { ...updated[index], [field]: value }
+    if (field === 'tagIds') {
+      updated[index] = { ...updated[index], [field]: normalizeTagIds(value) }
+    } else {
+      updated[index] = { ...updated[index], [field]: value }
+    }
     setPreviewBills(updated)
   }
 
@@ -412,6 +426,8 @@ export default function UploadPage() {
             style={{ width: '100%' }}
             treeData={tagTree}
             treeCheckable
+            treeCheckStrictly
+            showCheckedStrategy={TreeSelect.SHOW_PARENT}
             value={record.tagIds}
             onChange={val => handleBillChange(index, 'tagIds', val)}
           />

@@ -194,10 +194,16 @@ export default function BillsPage() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
+      const normalizedTagIds = Array.isArray(values.tagIds)
+        ? values.tagIds
+            .map(v => (typeof v === 'string' ? v : (v as { value?: string }).value))
+            .filter((v: unknown): v is string => typeof v === 'string' && v.length > 0)
+        : undefined
       const data = {
         ...values,
         date: values.date.format('YYYY-MM-DD'),
-        actualAmount: values.actualAmount ?? values.amount - (values.discount || 0)
+        actualAmount: values.actualAmount ?? values.amount - (values.discount || 0),
+        tagIds: normalizedTagIds
       }
 
       // 清理空的 categoryId 和 tagIds，避免 UUID 验证失败
@@ -472,6 +478,8 @@ export default function BillsPage() {
               placeholder="请选择标签"
               treeData={tagTree}
               treeCheckable
+              treeCheckStrictly
+              showCheckedStrategy={TreeSelect.SHOW_PARENT}
             />
           </Form.Item>
           <Form.Item name="remark" label="备注">

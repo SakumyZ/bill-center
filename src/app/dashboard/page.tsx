@@ -50,7 +50,13 @@ interface Overview {
 
 interface CategoryStat {
   categoryId: string
-  category: { id: string; name: string; color?: string; type: string } | null
+  category: {
+    id: string
+    name: string
+    color?: string
+    type: string
+    parentId?: string | null
+  } | null
   totalAmount: number
   count: number
 }
@@ -108,13 +114,20 @@ export default function DashboardPage() {
   const [topBills, setTopBills] = useState<BillItem[]>([])
   const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
+  const [flatCategories, setFlatCategories] = useState<Array<Record<string, unknown>>>([])
+  const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
   const loadMetadata = useCallback(async () => {
-    const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
+    const [catRes, tagRes, flatCatRes] = await Promise.all([
+      fetchCategories(),
+      fetchTags(),
+      fetchCategories({ flat: true })
+    ])
     if (catRes.success)
       setCategoryTree(convertToTreeSelectData(catRes.data as Record<string, unknown>[]))
     if (tagRes.success)
       setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
+    if (flatCatRes.success) setFlatCategories(flatCatRes.data as Array<Record<string, unknown>>)
   }, [])
 
   const loadStatistics = useCallback(async () => {
@@ -152,9 +165,94 @@ export default function DashboardPage() {
     loadStatistics()
   }, [loadStatistics])
 
-  // 分类饼图配置
+  // 分类饼图配置（支持钻取）
+  const getFilteredCategoryData = () => {
+    const expenseCategories = categoryData.filter(d => d.category?.type === 'EXPENSE')
+
+    if (drillDownParentId === null) {
+      // 显示一级分类：没有 parentId 或者是聚合后的一级分类数据
+      const topLevelIds = flatCategories
+        .filter((c: Record<string, unknown>) => !c.parentId)
+        .map((c: Record<string, unknown>) => c.id as string)
+
+      // 聚合：如果有子分类的数据，归并到父分类
+      const aggregated = new Map<
+        string,
+        { name: string; color?: string; total: number; id: string }
+      >()
+
+      expenseCategories.forEach(d => {
+        if (!d.category) return
+        const catId = d.category.id
+        const parentId = d.category.parentId
+
+        // 如果是子分类，找到其父分类
+        if (parentId && topLevelIds.includes(parentId)) {
+          const existing = aggregated.get(parentId)
+          const parent = flatCategories.find((c: Record<string, unknown>) => c.id === parentId) as
+            | Record<string, unknown>
+            | undefined
+          if (existing) {
+            existing.total += d.totalAmount
+          } else if (parent) {
+            aggregated.set(parentId, {
+              id: parentId,
+              name: parent.name as string,
+              color: parent.color as string | undefined,
+              total: d.totalAmount
+            })
+          }
+        } else if (topLevelIds.includes(catId)) {
+          // 如果本身就是一级分类
+          const existing = aggregated.get(catId)
+          if (existing) {
+            existing.total += d.totalAmount
+          } else {
+            aggregated.set(catId, {
+              id: catId,
+              name: d.category.name,
+              color: d.category.color,
+              total: d.totalAmount
+            })
+          }
+        }
+      })
+
+      return Array.from(aggregated.values()).map(item => ({
+        categoryId: item.id,
+        value: item.total,
+        name: item.name,
+        itemStyle: item.color ? { color: item.color } : undefined
+      }))
+    } else {
+      // 显示选中一级分类的子分类
+      return expenseCategories
+        .filter(d => d.category?.parentId === drillDownParentId)
+        .map(d => ({
+          categoryId: d.categoryId,
+          value: d.totalAmount,
+          name: d.category?.name || '未分类',
+          itemStyle: d.category?.color ? { color: d.category.color } : undefined
+        }))
+    }
+  }
+
+  const filteredPieData = getFilteredCategoryData()
+  const currentParentName = drillDownParentId
+    ? ((
+        flatCategories.find((c: Record<string, unknown>) => c.id === drillDownParentId) as
+          | Record<string, unknown>
+          | undefined
+      )?.name as string)
+    : null
+
   const categoryPieOption = {
-    title: { text: '支出分类占比', left: 'center' },
+    title: {
+      text: drillDownParentId ? `${currentParentName} - 子分类占比` : '支出分类占比',
+      left: 'center',
+      subtext: drillDownParentId ? '点击返回一级分类' : '点击分类查看子分类',
+      subtextStyle: { color: '#999', fontSize: 12 }
+    },
     tooltip: {
       trigger: 'item',
       formatter: '{b}: ¥{c} ({d}%)'
@@ -166,13 +264,7 @@ export default function DashboardPage() {
         avoidLabelOverlap: false,
         itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
         label: { show: true, formatter: '{b}\n{d}%' },
-        data: categoryData
-          .filter(d => d.category?.type === 'EXPENSE')
-          .map(d => ({
-            value: d.totalAmount,
-            name: d.category?.name || '未分类',
-            itemStyle: d.category?.color ? { color: d.category.color } : undefined
-          }))
+        data: filteredPieData
       }
     ]
   }
@@ -380,7 +472,32 @@ export default function DashboardPage() {
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={12}>
           <Card>
-            <ReactEChartsCore option={categoryPieOption} style={{ height: 350 }} notMerge />
+            <ReactEChartsCore
+              option={categoryPieOption}
+              style={{ height: 350 }}
+              notMerge
+              onEvents={{
+                click: (params: { data?: { categoryId?: string } }) => {
+                  if (drillDownParentId === null) {
+                    // 当前是一级分类视图，点击钻取到子分类
+                    const clickedCategoryId = params.data?.categoryId
+                    if (clickedCategoryId) {
+                      const hasChildren = flatCategories.some(
+                        (c: Record<string, unknown>) => c.parentId === clickedCategoryId
+                      )
+                      if (hasChildren) {
+                        setDrillDownParentId(clickedCategoryId)
+                      } else {
+                        message.info('该分类没有子分类')
+                      }
+                    }
+                  } else {
+                    // 当前是子分类视图，点击返回一级分类
+                    setDrillDownParentId(null)
+                  }
+                }
+              }}
+            />
           </Card>
         </Col>
         <Col xs={24} lg={12}>
