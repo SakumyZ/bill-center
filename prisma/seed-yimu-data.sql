@@ -130,6 +130,24 @@ VALUES
   ('cat-other-001-002', '其他消费', 'cat-other-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW());
 
 
+-- 10. 收入分类
+INSERT INTO categories (id, name, type, sort, color, icon, "createdAt", "updatedAt")
+VALUES
+  ('cat-income-001', '红包', 'INCOME', 1, NULL, NULL, NOW(), NOW()),
+  ('cat-income-002', '金额返现', 'INCOME', 2, NULL, NULL, NOW(), NOW()),
+  ('cat-income-003', '其他', 'INCOME', 3, NULL, NULL, NOW(), NOW()),
+  ('cat-income-004', '中奖', 'INCOME', 4, NULL, NULL, NOW(), NOW()),
+  ('cat-income-005', '理财盈利', 'INCOME', 5, NULL, NULL, NOW(), NOW()),
+  ('cat-income-006', '礼金人情', 'INCOME', 6, NULL, NULL, NOW(), NOW()),
+  ('cat-income-007', '借入', 'INCOME', 7, NULL, NULL, NOW(), NOW()),
+  ('cat-income-008', '奖金', 'INCOME', 8, NULL, NULL, NOW(), NOW()),
+  ('cat-income-009', '兼职外快', 'INCOME', 9, NULL, NULL, NOW(), NOW()),
+  ('cat-income-010', '工资', 'INCOME', 10, NULL, NULL, NOW(), NOW()),
+  ('cat-income-011', '二手闲置', 'INCOME', 11, NULL, NULL, NOW(), NOW()),
+  ('cat-income-012', '补贴', 'INCOME', 12, NULL, NULL, NOW(), NOW()),
+  ('cat-income-013', '报销', 'INCOME', 13, NULL, NULL, NOW(), NOW());
+
+
 -- ============ 插入标签数据 ============
 
 -- 1. 手办
