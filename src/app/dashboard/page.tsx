@@ -371,9 +371,9 @@ export default function DashboardPage() {
   ]
 
   return (
-    <Spin spinning={loading}>
-      {/* 筛选栏 */}
-      <div style={{ marginBottom: 24 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* 筛选栏 - 固定在顶部 */}
+      <div style={{ flexShrink: 0, marginBottom: 24 }}>
         <Space wrap>
           <span>时间维度：</span>
           <Select
@@ -416,129 +416,134 @@ export default function DashboardPage() {
         </Space>
       </div>
 
-      {/* 收支概览 */}
-      {overview && (
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="总收入"
-                value={overview.totalIncome}
-                precision={2}
-                prefix={<ArrowUpOutlined style={{ color: '#52c41a' }} />}
-                suffix="元"
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="总支出"
-                value={overview.totalExpense}
-                precision={2}
-                prefix={<ArrowDownOutlined style={{ color: '#ff4d4f' }} />}
-                suffix="元"
-                valueStyle={{ color: '#ff4d4f' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="净收入"
-                value={overview.netIncome}
-                precision={2}
-                prefix={<DollarOutlined />}
-                suffix="元"
-                valueStyle={{ color: overview.netIncome >= 0 ? '#52c41a' : '#ff4d4f' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="账单笔数"
-                value={overview.totalCount}
-                prefix={<FileTextOutlined />}
-                suffix="笔"
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
+      {/* 可滚动内容区域 */}
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        <Spin spinning={loading}>
+          {/* 收支概览 */}
+          {overview && (
+            <Row gutter={16} style={{ marginBottom: 24 }}>
+              <Col xs={24} sm={12} md={6}>
+                <Card>
+                  <Statistic
+                    title="总收入"
+                    value={overview.totalIncome}
+                    precision={2}
+                    prefix={<ArrowUpOutlined style={{ color: '#52c41a' }} />}
+                    suffix="元"
+                    valueStyle={{ color: '#52c41a' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card>
+                  <Statistic
+                    title="总支出"
+                    value={overview.totalExpense}
+                    precision={2}
+                    prefix={<ArrowDownOutlined style={{ color: '#ff4d4f' }} />}
+                    suffix="元"
+                    valueStyle={{ color: '#ff4d4f' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card>
+                  <Statistic
+                    title="净收入"
+                    value={overview.netIncome}
+                    precision={2}
+                    prefix={<DollarOutlined />}
+                    suffix="元"
+                    valueStyle={{ color: overview.netIncome >= 0 ? '#52c41a' : '#ff4d4f' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Card>
+                  <Statistic
+                    title="账单笔数"
+                    value={overview.totalCount}
+                    prefix={<FileTextOutlined />}
+                    suffix="笔"
+                  />
+                </Card>
+              </Col>
+            </Row>
+          )}
 
-      {/* 图表 */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <Card>
-            <ReactEChartsCore
-              option={categoryPieOption}
-              style={{ height: 350 }}
-              notMerge
-              onEvents={{
-                click: (params: { data?: { categoryId?: string } }) => {
-                  if (drillDownParentId === null) {
-                    // 当前是一级分类视图，点击钻取到子分类
-                    const clickedCategoryId = params.data?.categoryId
-                    if (clickedCategoryId) {
-                      const hasChildren = flatCategories.some(
-                        (c: Record<string, unknown>) => c.parentId === clickedCategoryId
-                      )
-                      if (hasChildren) {
-                        setDrillDownParentId(clickedCategoryId)
+          {/* 图表 */}
+          <Row gutter={16} style={{ marginBottom: 24 }}>
+            <Col xs={24} lg={12}>
+              <Card>
+                <ReactEChartsCore
+                  option={categoryPieOption}
+                  style={{ height: 350 }}
+                  notMerge
+                  onEvents={{
+                    click: (params: { data?: { categoryId?: string } }) => {
+                      if (drillDownParentId === null) {
+                        // 当前是一级分类视图，点击钻取到子分类
+                        const clickedCategoryId = params.data?.categoryId
+                        if (clickedCategoryId) {
+                          const hasChildren = flatCategories.some(
+                            (c: Record<string, unknown>) => c.parentId === clickedCategoryId
+                          )
+                          if (hasChildren) {
+                            setDrillDownParentId(clickedCategoryId)
+                          } else {
+                            message.info('该分类没有子分类')
+                          }
+                        }
                       } else {
-                        message.info('该分类没有子分类')
+                        // 当前是子分类视图，点击返回一级分类
+                        setDrillDownParentId(null)
                       }
                     }
-                  } else {
-                    // 当前是子分类视图，点击返回一级分类
-                    setDrillDownParentId(null)
-                  }
-                }
-              }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card>
-            <ReactEChartsCore option={trendLineOption} style={{ height: 350 }} notMerge />
-          </Card>
-        </Col>
-      </Row>
+                  }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} lg={12}>
+              <Card>
+                <ReactEChartsCore option={trendLineOption} style={{ height: 350 }} notMerge />
+              </Card>
+            </Col>
+          </Row>
 
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <Card>
-            {tagCloud.length > 0 ? (
-              <ReactEChartsCore option={wordCloudOption} style={{ height: 350 }} notMerge />
-            ) : (
-              <div
-                style={{
-                  height: 350,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#999'
-                }}
-              >
-                暂无标签数据
-              </div>
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="大额账单 TOP 10">
-            <Table
-              columns={topBillColumns}
-              dataSource={topBills}
-              rowKey="id"
-              size="small"
-              pagination={false}
-            />
-          </Card>
-        </Col>
-      </Row>
-    </Spin>
+          <Row gutter={16} style={{ marginBottom: 24 }}>
+            <Col xs={24} lg={12}>
+              <Card>
+                {tagCloud.length > 0 ? (
+                  <ReactEChartsCore option={wordCloudOption} style={{ height: 350 }} notMerge />
+                ) : (
+                  <div
+                    style={{
+                      height: 350,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#999'
+                    }}
+                  >
+                    暂无标签数据
+                  </div>
+                )}
+              </Card>
+            </Col>
+            <Col xs={24} lg={12}>
+              <Card title="大额账单 TOP 10">
+                <Table
+                  columns={topBillColumns}
+                  dataSource={topBills}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                />
+              </Card>
+            </Col>
+          </Row>
+        </Spin>
+      </div>
+    </div>
   )
 }
