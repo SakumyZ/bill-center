@@ -430,7 +430,7 @@ export default function DashboardPage() {
                     precision={2}
                     prefix={<ArrowUpOutlined style={{ color: '#52c41a' }} />}
                     suffix="元"
-                    valueStyle={{ color: '#52c41a' }}
+                    styles={{ content: { color: '#52c41a' } }}
                   />
                 </Card>
               </Col>
@@ -442,7 +442,7 @@ export default function DashboardPage() {
                     precision={2}
                     prefix={<ArrowDownOutlined style={{ color: '#ff4d4f' }} />}
                     suffix="元"
-                    valueStyle={{ color: '#ff4d4f' }}
+                    styles={{ content: { color: '#ff4d4f' } }}
                   />
                 </Card>
               </Col>
@@ -454,7 +454,7 @@ export default function DashboardPage() {
                     precision={2}
                     prefix={<DollarOutlined />}
                     suffix="元"
-                    valueStyle={{ color: overview.netIncome >= 0 ? '#52c41a' : '#ff4d4f' }}
+                    styles={{ content: { color: overview.netIncome >= 0 ? '#52c41a' : '#ff4d4f' } }}
                   />
                 </Card>
               </Col>

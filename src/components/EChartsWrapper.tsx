@@ -27,7 +27,7 @@ interface EChartsWrapperProps {
   option: Record<string, unknown>
   style?: React.CSSProperties
   notMerge?: boolean
-  onEvents?: Record<string, (params?: unknown) => void>
+  onEvents?: Record<string, (params: any) => void>
 }
 
 export default function EChartsWrapper({ option, style, notMerge, onEvents }: EChartsWrapperProps) {
