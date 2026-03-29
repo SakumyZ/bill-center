@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { successResponse, errorResponse } from '@/lib/api-response'
 import { updateBillSchema } from '@/lib/validators'
+import { validateBillCategory } from '@/lib/bill-validation'
 
 // GET /api/bills/[id]
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +53,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { tagIds, ...data } = result.data
+    const effectiveType = data.type ?? existing.type
+    const effectiveCategoryId =
+      data.categoryId !== undefined ? data.categoryId : existing.categoryId
+    const categoryError = await validateBillCategory(effectiveCategoryId, effectiveType)
+
+    if (categoryError) {
+      return errorResponse(categoryError)
+    }
 
     // 如果更新了金额相关字段，重新计算实付金额
     const updateData: Record<string, unknown> = { ...data }

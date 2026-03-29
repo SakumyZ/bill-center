@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { successResponse, errorResponse, paginationParams } from '@/lib/api-response'
 import { createBillSchema } from '@/lib/validators'
+import { validateBillCategory } from '@/lib/bill-validation'
 import { getAllDescendantIds } from '@/lib/tree-utils'
 import { Prisma } from '@/generated/prisma/client'
 
@@ -109,6 +110,11 @@ export async function POST(request: NextRequest) {
     }
 
     const { tagIds, ...data } = result.data
+    const categoryError = await validateBillCategory(data.categoryId, data.type)
+
+    if (categoryError) {
+      return errorResponse(categoryError)
+    }
 
     // 计算实付金额
     const actualAmount = data.actualAmount ?? data.amount - data.discount

@@ -48,6 +48,22 @@ interface TreeOption {
   children?: TreeOption[]
 }
 
+interface CategoryOption extends TreeOption {
+  type: BillRecord['type']
+  children?: CategoryOption[]
+}
+
+function convertToCategoryTreeSelectData(nodes: Record<string, unknown>[]): CategoryOption[] {
+  return nodes.map(node => ({
+    value: node.id as string,
+    title: node.name as string,
+    type: node.type as BillRecord['type'],
+    children: node.children
+      ? convertToCategoryTreeSelectData(node.children as Record<string, unknown>[])
+      : undefined
+  }))
+}
+
 function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[] {
   return nodes.map(node => ({
     value: node.id as string,
@@ -58,6 +74,36 @@ function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[]
   }))
 }
 
+function filterCategoriesByType(
+  nodes: CategoryOption[],
+  type?: BillRecord['type']
+): CategoryOption[] {
+  if (!type) {
+    return nodes
+  }
+
+  return nodes
+    .filter(node => node.type === type)
+    .map(node => ({
+      ...node,
+      children: node.children ? filterCategoriesByType(node.children, type) : undefined
+    }))
+}
+
+function hasCategoryValue(nodes: CategoryOption[], value?: string) {
+  if (!value) {
+    return false
+  }
+
+  return nodes.some(node => {
+    if (node.value === value) {
+      return true
+    }
+
+    return node.children ? hasCategoryValue(node.children, value) : false
+  })
+}
+
 export default function BillsPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
@@ -65,14 +111,21 @@ export default function BillsPage() {
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 })
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
+  const [categoryTree, setCategoryTree] = useState<CategoryOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [form] = Form.useForm()
   const [filterForm] = Form.useForm()
+  const currentType = Form.useWatch<BillRecord['type']>('type', form) ?? 'EXPENSE'
+  const currentFilterType = Form.useWatch<BillRecord['type'] | undefined>('type', filterForm)
 
   // 筛选条件
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
+  const filteredCategoryTree = filterCategoriesByType(categoryTree, currentType)
+  const filteredSearchCategoryTree = filterCategoriesByType(categoryTree, currentFilterType)
+  const discountLabel = currentType === 'INCOME' ? '手续费/扣除' : '优惠金额'
+  const actualAmountLabel = currentType === 'INCOME' ? '到账金额' : '实付金额'
+  const categoryPlaceholder = currentType === 'INCOME' ? '请选择收入分类' : '请选择支出分类'
 
   const loadBills = useCallback(async () => {
     setLoading(true)
@@ -98,7 +151,7 @@ export default function BillsPage() {
   const loadMetadata = useCallback(async () => {
     const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
     if (catRes.success)
-      setCategoryTree(convertToTreeSelectData(catRes.data as Record<string, unknown>[]))
+      setCategoryTree(convertToCategoryTreeSelectData(catRes.data as Record<string, unknown>[]))
     if (tagRes.success)
       setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
   }, [])
@@ -132,6 +185,48 @@ export default function BillsPage() {
     filterForm.resetFields()
     setFilters({})
     setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const handleFormValuesChange = (
+    changedValues: Record<string, unknown>,
+    allValues: Record<string, unknown>
+  ) => {
+    if ('type' in changedValues) {
+      const availableCategories = filterCategoriesByType(
+        categoryTree,
+        allValues.type as BillRecord['type'] | undefined
+      )
+      const currentCategoryId = form.getFieldValue('categoryId') as string | undefined
+
+      if (currentCategoryId && !hasCategoryValue(availableCategories, currentCategoryId)) {
+        form.setFieldValue('categoryId', undefined)
+      }
+    }
+
+    if ('amount' in changedValues || 'discount' in changedValues) {
+      const amount = Number(allValues.amount || 0)
+      const discount = Number(allValues.discount || 0)
+      form.setFieldValue('actualAmount', amount - discount)
+    }
+  }
+
+  const handleFilterValuesChange = (
+    changedValues: Record<string, unknown>,
+    allValues: Record<string, unknown>
+  ) => {
+    if (!('type' in changedValues)) {
+      return
+    }
+
+    const availableCategories = filterCategoriesByType(
+      categoryTree,
+      allValues.type as BillRecord['type'] | undefined
+    )
+    const currentCategoryId = filterForm.getFieldValue('categoryId') as string | undefined
+
+    if (currentCategoryId && !hasCategoryValue(availableCategories, currentCategoryId)) {
+      filterForm.setFieldValue('categoryId', undefined)
+    }
   }
 
   const handleAdd = () => {
@@ -322,7 +417,12 @@ export default function BillsPage() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* 筛选栏 */}
       <div style={{ marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 8 }}>
-        <Form form={filterForm} layout="inline" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <Form
+          form={filterForm}
+          layout="inline"
+          style={{ flexWrap: 'wrap', gap: 8 }}
+          onValuesChange={handleFilterValuesChange}
+        >
           <Form.Item name="dateRange" label="日期">
             <RangePicker />
           </Form.Item>
@@ -342,7 +442,7 @@ export default function BillsPage() {
               allowClear
               placeholder="全部"
               style={{ width: 150 }}
-              treeData={categoryTree}
+              treeData={filteredSearchCategoryTree}
             />
           </Form.Item>
           <Form.Item name="tagId" label="标签">
@@ -420,7 +520,7 @@ export default function BillsPage() {
         width={600}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={handleFormValuesChange}>
           <Form.Item name="date" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
@@ -439,37 +539,21 @@ export default function BillsPage() {
               rules={[{ required: true, message: '请输入金额' }]}
               style={{ flex: 1 }}
             >
-              <InputNumber
-                min={0}
-                precision={2}
-                prefix="¥"
-                style={{ width: '100%' }}
-                onChange={() => {
-                  const amount = form.getFieldValue('amount') || 0
-                  const discount = form.getFieldValue('discount') || 0
-                  form.setFieldValue('actualAmount', amount - discount)
-                }}
-              />
+              <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="discount" label="优惠金额" style={{ flex: 1 }}>
-              <InputNumber
-                min={0}
-                precision={2}
-                prefix="¥"
-                style={{ width: '100%' }}
-                onChange={() => {
-                  const amount = form.getFieldValue('amount') || 0
-                  const discount = form.getFieldValue('discount') || 0
-                  form.setFieldValue('actualAmount', amount - discount)
-                }}
-              />
+            <Form.Item name="discount" label={discountLabel} style={{ flex: 1 }}>
+              <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="actualAmount" label="实付金额" style={{ flex: 1 }}>
+            <Form.Item name="actualAmount" label={actualAmountLabel} style={{ flex: 1 }}>
               <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
             </Form.Item>
           </Space>
           <Form.Item name="categoryId" label="分类">
-            <TreeSelect allowClear placeholder="请选择分类" treeData={categoryTree} />
+            <TreeSelect
+              allowClear
+              placeholder={categoryPlaceholder}
+              treeData={filteredCategoryTree}
+            />
           </Form.Item>
           <Form.Item name="tagIds" label="标签">
             <TreeSelect
