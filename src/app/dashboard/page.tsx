@@ -7,6 +7,7 @@ import {
   Col,
   Statistic,
   DatePicker,
+  Radio,
   Select,
   Space,
   Spin,
@@ -26,6 +27,99 @@ import dayjs from 'dayjs'
 import { fetchStatistics, fetchCategories, fetchTags } from '@/lib/api-client'
 
 const { RangePicker } = DatePicker
+
+type Dimension = 'year' | 'month' | 'day'
+type PeriodPreset = 'previous' | 'current' | 'next'
+
+function getDefaultDateRange(dimension: Dimension): [dayjs.Dayjs, dayjs.Dayjs] {
+  if (dimension === 'year') {
+    return [dayjs().startOf('year'), dayjs().endOf('year')]
+  }
+
+  const previousMonth = dayjs().subtract(1, 'month')
+  return [previousMonth.startOf('month'), previousMonth.endOf('month')]
+}
+
+function getPresetDateRange(
+  dimension: Dimension,
+  preset: PeriodPreset
+): [dayjs.Dayjs, dayjs.Dayjs] {
+  const offset = preset === 'previous' ? -1 : preset === 'next' ? 1 : 0
+
+  if (dimension === 'year') {
+    const target = dayjs().add(offset, 'year')
+    return [target.startOf('year'), target.endOf('year')]
+  }
+
+  if (dimension === 'month') {
+    const target = dayjs().add(offset, 'month')
+    return [target.startOf('month'), target.endOf('month')]
+  }
+
+  const target = dayjs().add(offset, 'day')
+  return [target.startOf('day'), target.endOf('day')]
+}
+
+function normalizeDateRange(
+  dimension: Dimension,
+  range: [dayjs.Dayjs, dayjs.Dayjs]
+): [dayjs.Dayjs, dayjs.Dayjs] {
+  if (dimension === 'year') {
+    return [range[0].startOf('year'), range[1].endOf('year')]
+  }
+
+  if (dimension === 'month') {
+    return [range[0].startOf('month'), range[1].endOf('month')]
+  }
+
+  return [range[0].startOf('day'), range[1].endOf('day')]
+}
+
+function getPickerMode(dimension: Dimension): 'year' | 'month' | undefined {
+  if (dimension === 'year') return 'year'
+  if (dimension === 'month') return 'month'
+  return undefined
+}
+
+function getRangePickerFormat(dimension: Dimension) {
+  if (dimension === 'year') return 'YYYY'
+  if (dimension === 'month') return 'YYYY-MM'
+  return 'YYYY-MM-DD'
+}
+
+function getPresetLabel(dimension: Dimension, preset: PeriodPreset) {
+  const labels: Record<Dimension, Record<PeriodPreset, string>> = {
+    year: {
+      previous: '前年',
+      current: '本年',
+      next: '下年'
+    },
+    month: {
+      previous: '上月',
+      current: '本月',
+      next: '下月'
+    },
+    day: {
+      previous: '前日',
+      current: '本日',
+      next: '次日'
+    }
+  }
+
+  return labels[dimension][preset]
+}
+
+function resolveMatchedPreset(
+  dimension: Dimension,
+  dateRange: [dayjs.Dayjs, dayjs.Dayjs]
+): PeriodPreset | undefined {
+  const presets: PeriodPreset[] = ['previous', 'current', 'next']
+
+  return presets.find(preset => {
+    const [start, end] = getPresetDateRange(dimension, preset)
+    return dateRange[0].isSame(start, 'day') && dateRange[1].isSame(end, 'day')
+  })
+}
 
 // 动态导入 ECharts 避免 SSR 中 window is not defined
 const ReactEChartsCore = dynamic(
@@ -99,11 +193,10 @@ function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[]
 export default function DashboardPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
-  const [dimension, setDimension] = useState<string>('month')
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().startOf('year'),
-    dayjs().endOf('year')
-  ])
+  const [dimension, setDimension] = useState<Dimension>('month')
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(
+    getDefaultDateRange('month')
+  )
   const [categoryId, setCategoryId] = useState<string | undefined>()
   const [tagId, setTagId] = useState<string | undefined>()
 
@@ -164,6 +257,8 @@ export default function DashboardPage() {
   useEffect(() => {
     loadStatistics()
   }, [loadStatistics])
+
+  const matchedPreset = resolveMatchedPreset(dimension, dateRange)
 
   // 分类饼图配置（支持钻取）
   const getFilteredCategoryData = () => {
@@ -378,7 +473,10 @@ export default function DashboardPage() {
           <span>时间维度：</span>
           <Select
             value={dimension}
-            onChange={setDimension}
+            onChange={(value: Dimension) => {
+              setDimension(value)
+              setDateRange(getDefaultDateRange(value))
+            }}
             style={{ width: 100 }}
             options={[
               { label: '按年', value: 'year' },
@@ -386,12 +484,30 @@ export default function DashboardPage() {
               { label: '按日', value: 'day' }
             ]}
           />
+          <span>快捷周期：</span>
+          <Radio.Group
+            optionType="button"
+            buttonStyle="solid"
+            value={matchedPreset}
+            onChange={event => {
+              const preset = event.target.value as PeriodPreset
+              setDateRange(getPresetDateRange(dimension, preset))
+            }}
+            options={[
+              { label: getPresetLabel(dimension, 'previous'), value: 'previous' },
+              { label: getPresetLabel(dimension, 'current'), value: 'current' },
+              { label: getPresetLabel(dimension, 'next'), value: 'next' }
+            ]}
+          />
           <span>日期范围：</span>
           <RangePicker
             value={dateRange}
+            picker={getPickerMode(dimension)}
+            format={getRangePickerFormat(dimension)}
+            allowClear={false}
             onChange={vals => {
               if (vals && vals[0] && vals[1]) {
-                setDateRange([vals[0], vals[1]])
+                setDateRange(normalizeDateRange(dimension, [vals[0], vals[1]]))
               }
             }}
           />
