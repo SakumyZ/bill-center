@@ -123,3 +123,15 @@ model BillTag {
   @@index([tagId], name: "idx_billtag_tag")
   @@map("bill_tags")
 }
+
+// ============ 系统配置表 ============
+model SystemConfig {
+  key         String   @id @db.VarChar(100)
+  value       String   @db.Text
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_configs")
+}
+

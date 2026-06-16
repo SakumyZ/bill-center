@@ -144,6 +144,30 @@ export async function analyzeWithAI(
   })
 }
 
+// ============ 系统配置 API ============
+
+export async function fetchSystemConfigs() {
+  return request<Record<string, string>>('/api/system-configs')
+}
+
+export async function updateSystemConfigs(configs: Record<string, string>) {
+  return request('/api/system-configs', {
+    method: 'POST',
+    body: JSON.stringify({ configs })
+  })
+}
+
+export async function testAIConnection(params: {
+  apiKey?: string
+  baseURL?: string
+  model?: string
+}) {
+  return request<{ reply?: string }>('/api/ai/test', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
+
 // ============ 导入批次 API ============
 
 export async function fetchImportBatches(params?: Record<string, string | number | undefined>) {

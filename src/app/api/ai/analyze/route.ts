@@ -5,10 +5,7 @@ import OpenAI from 'openai'
 
 // POST /api/ai/analyze - AI 分析账单分类和标签
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.OPENAI_API_KEY
-  const baseURL = process.env.OPENAI_BASE_URL || 'https://api.longcat.chat/openai'
-  const model = process.env.OPENAI_MODEL || 'LongCat-Flash-Lite'
-
+  let baseURL = 'https://api.longcat.chat/openai'
   try {
     const { bills } = (await request.json()) as {
       bills: Array<{ remark: string; amount: number; type: string }>
@@ -18,8 +15,30 @@ export async function POST(request: NextRequest) {
       return errorResponse('请提供账单数据')
     }
 
+    // 从数据库获取配置，若无则后备环境变量
+    const configs = await prisma.systemConfig.findMany({
+      where: {
+        key: {
+          in: ['ai_enabled', 'ai_api_key', 'ai_base_url', 'ai_model']
+        }
+      }
+    })
+    const configMap: Record<string, string> = {}
+    configs.forEach(cfg => {
+      configMap[cfg.key] = cfg.value
+    })
+
+    const isEnabled = configMap['ai_enabled'] ?? 'true' // 默认开启
+    const apiKey = configMap['ai_api_key'] || process.env.OPENAI_API_KEY
+    baseURL = configMap['ai_base_url'] || process.env.OPENAI_BASE_URL || 'https://api.longcat.chat/openai'
+    const model = configMap['ai_model'] || process.env.OPENAI_MODEL || 'LongCat-Flash-Lite'
+
+    if (isEnabled !== 'true') {
+      return errorResponse('AI 账单分析功能未启用，请到“系统设置”中开启', 400)
+    }
+
     if (!apiKey) {
-      return errorResponse('未配置 AI API Key，请在 .env 中设置 OPENAI_API_KEY', 500)
+      return errorResponse('未配置 AI API Key，请先到“系统设置”中配置', 400)
     }
 
     console.log('[AI 分析] 配置:', { baseURL, model, apiKeySet: !!apiKey })

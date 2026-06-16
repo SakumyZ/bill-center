@@ -7,7 +7,8 @@ import {
   AppstoreOutlined,
   TagsOutlined,
   FileTextOutlined,
-  UploadOutlined
+  UploadOutlined,
+  SettingOutlined
 } from '@ant-design/icons'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -38,6 +39,11 @@ const menuItems = [
     key: '/upload',
     icon: <UploadOutlined />,
     label: '上传账单'
+  },
+  {
+    key: '/settings',
+    icon: <SettingOutlined />,
+    label: '系统设置'
   }
 ]
 
