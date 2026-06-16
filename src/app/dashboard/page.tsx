@@ -14,17 +14,28 @@ import {
   Table,
   Tag,
   TreeSelect,
-  App
+  App,
+  Button
 } from 'antd'
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   DollarOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  EditOutlined
 } from '@ant-design/icons'
 import dynamic from 'next/dynamic'
 import dayjs from 'dayjs'
 import { fetchStatistics, fetchCategories, fetchTags } from '@/lib/api-client'
+import BillModal from '@/components/BillModal'
+import {
+  BillModalValues,
+  CategoryOption,
+  TreeOption,
+  convertToCategoryTreeSelectData,
+  convertToTreeSelectData
+} from '@/lib/bill-form'
+import type { ColumnsType } from 'antd/es/table'
 
 const { RangePicker } = DatePicker
 
@@ -127,12 +138,6 @@ const ReactEChartsCore = dynamic(
   { ssr: false }
 )
 
-interface TreeOption {
-  value: string
-  title: string
-  children?: TreeOption[]
-}
-
 interface Overview {
   totalIncome: number
   totalExpense: number
@@ -172,27 +177,27 @@ interface TagCloudItem {
 interface BillItem {
   id: string
   date: string
-  type: string
+  type: 'INCOME' | 'EXPENSE'
   amount: number
+  discount: number
   actualAmount: number
   remark?: string
-  category?: { name: string; color?: string }
-  tags: Array<{ name: string; color?: string }>
+  source?: string
+  category?: { id: string; name: string; color?: string }
+  tags: Array<{ id: string; name: string; color?: string }>
 }
 
-function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[] {
-  return nodes.map(node => ({
-    value: node.id as string,
-    title: node.name as string,
-    children: node.children
-      ? convertToTreeSelectData(node.children as Record<string, unknown>[])
-      : undefined
-  }))
+interface PieDataItem {
+  categoryId: string
+  value: number
+  name: string
+  itemStyle?: { color: string }
 }
 
 export default function DashboardPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
+  const [editingBill, setEditingBill] = useState<BillModalValues | null>(null)
   const [dimension, setDimension] = useState<Dimension>('month')
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(
     getDefaultDateRange('month')
@@ -205,25 +210,25 @@ export default function DashboardPage() {
   const [trend, setTrend] = useState<TrendItem[]>([])
   const [tagCloud, setTagCloud] = useState<TagCloudItem[]>([])
   const [topBills, setTopBills] = useState<BillItem[]>([])
-  const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
+  const [categoryTree, setCategoryTree] = useState<CategoryOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
   const [flatCategories, setFlatCategories] = useState<Array<Record<string, unknown>>>([])
   const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
-  const loadMetadata = useCallback(async () => {
+  const loadMetadata = useCallback<() => Promise<void>>(async () => {
     const [catRes, tagRes, flatCatRes] = await Promise.all([
       fetchCategories(),
       fetchTags(),
       fetchCategories({ flat: true })
     ])
     if (catRes.success)
-      setCategoryTree(convertToTreeSelectData(catRes.data as Record<string, unknown>[]))
+      setCategoryTree(convertToCategoryTreeSelectData(catRes.data as Record<string, unknown>[]))
     if (tagRes.success)
       setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
     if (flatCatRes.success) setFlatCategories(flatCatRes.data as Array<Record<string, unknown>>)
   }, [])
 
-  const loadStatistics = useCallback(async () => {
+  const loadStatistics = useCallback<() => Promise<void>>(async () => {
     setLoading(true)
     try {
       const params: Record<string, string | undefined> = {
@@ -258,10 +263,33 @@ export default function DashboardPage() {
     loadStatistics()
   }, [loadStatistics])
 
+  const handleEditBill = (bill: BillItem): void => {
+    setEditingBill({
+      id: bill.id,
+      date: dayjs(bill.date).format('YYYY-MM-DD'),
+      type: bill.type,
+      amount: Number(bill.amount),
+      discount: Number(bill.discount || 0),
+      actualAmount: Number(bill.actualAmount),
+      categoryId: bill.category?.id,
+      tagIds: bill.tags.map(tag => tag.id),
+      remark: bill.remark
+    })
+  }
+
+  const handleCancelEdit = (): void => {
+    setEditingBill(null)
+  }
+
+  const handleBillModalSuccess = async (): Promise<void> => {
+    setEditingBill(null)
+    await loadStatistics()
+  }
+
   const matchedPreset = resolveMatchedPreset(dimension, dateRange)
 
   // 分类饼图配置（支持钻取）
-  const getFilteredCategoryData = () => {
+  const getFilteredCategoryData = (): PieDataItem[] => {
     const expenseCategories = categoryData.filter(d => d.category?.type === 'EXPENSE')
 
     if (drillDownParentId === null) {
@@ -427,26 +455,26 @@ export default function DashboardPage() {
     ]
   }
 
-  const topBillColumns = [
+  const topBillColumns: ColumnsType<BillItem> = [
     {
       title: '日期',
       dataIndex: 'date',
       key: 'date',
-      width: 110,
+      width: 102,
       render: (d: string) => dayjs(d).format('YYYY-MM-DD')
     },
     {
       title: '金额',
       dataIndex: 'actualAmount',
       key: 'actualAmount',
-      width: 100,
+      width: 96,
       render: (v: number) => `¥${Number(v).toFixed(2)}`
     },
     {
       title: '类型',
       dataIndex: 'type',
       key: 'type',
-      width: 70,
+      width: 68,
       render: (type: string) => (
         <Tag color={type === 'INCOME' ? 'green' : 'red'}>{type === 'INCOME' ? '收入' : '支出'}</Tag>
       )
@@ -455,13 +483,54 @@ export default function DashboardPage() {
       title: '分类',
       dataIndex: 'category',
       key: 'category',
+      width: 80,
+      ellipsis: true,
       render: (cat: BillItem['category']) => cat?.name || '-'
+    },
+    {
+      title: '标签',
+      dataIndex: 'tags',
+      key: 'tags',
+      width: 132,
+      render: (tags: BillItem['tags']) => {
+        if (!tags.length) {
+          return '-'
+        }
+
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {tags.slice(0, 2).map(tag => (
+              <Tag key={tag.id} color={tag.color || undefined} style={{ marginInlineEnd: 0 }}>
+                {tag.name}
+              </Tag>
+            ))}
+            {tags.length > 2 ? <Tag style={{ marginInlineEnd: 0 }}>+{tags.length - 2}</Tag> : null}
+          </div>
+        )
+      }
     },
     {
       title: '备注',
       dataIndex: 'remark',
       key: 'remark',
-      ellipsis: true
+      ellipsis: true,
+      render: (remark?: string) => remark || '-'
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 72,
+      align: 'center' as const,
+      render: (_: unknown, record: BillItem) => (
+        <Button
+          type="link"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={() => handleEditBill(record)}
+        >
+          编辑
+        </Button>
+      )
     }
   ]
 
@@ -653,13 +722,23 @@ export default function DashboardPage() {
                   dataSource={topBills}
                   rowKey="id"
                   size="small"
+                  tableLayout="fixed"
                   pagination={false}
+                  scroll={undefined}
                 />
               </Card>
             </Col>
           </Row>
         </Spin>
       </div>
+
+      <BillModal
+        open={!!editingBill}
+        mode="edit"
+        initialValues={editingBill || undefined}
+        onCancel={handleCancelEdit}
+        onSuccess={handleBillModalSuccess}
+      />
     </div>
   )
 }

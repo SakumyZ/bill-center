@@ -4,12 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
-  Modal,
   Form,
   Input,
   Select,
   DatePicker,
-  InputNumber,
   Space,
   App,
   Tag,
@@ -17,15 +15,19 @@ import {
   TreeSelect
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import {
-  fetchBills,
-  createBill,
-  updateBill,
-  deleteBill,
-  fetchCategories,
-  fetchTags
-} from '@/lib/api-client'
 import dayjs from 'dayjs'
+import { fetchBills, deleteBill, fetchCategories, fetchTags } from '@/lib/api-client'
+import BillModal from '@/components/BillModal'
+import {
+  BillModalValues,
+  BillType,
+  CategoryOption,
+  TreeOption,
+  convertToCategoryTreeSelectData,
+  convertToTreeSelectData,
+  filterCategoriesByType,
+  hasCategoryValue
+} from '@/lib/bill-form'
 
 const { RangePicker } = DatePicker
 
@@ -42,90 +44,23 @@ interface BillRecord {
   tags: Array<{ id: string; name: string; color?: string }>
 }
 
-interface TreeOption {
-  value: string
-  title: string
-  children?: TreeOption[]
-}
-
-interface CategoryOption extends TreeOption {
-  type: BillRecord['type']
-  children?: CategoryOption[]
-}
-
-function convertToCategoryTreeSelectData(nodes: Record<string, unknown>[]): CategoryOption[] {
-  return nodes.map(node => ({
-    value: node.id as string,
-    title: node.name as string,
-    type: node.type as BillRecord['type'],
-    children: node.children
-      ? convertToCategoryTreeSelectData(node.children as Record<string, unknown>[])
-      : undefined
-  }))
-}
-
-function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[] {
-  return nodes.map(node => ({
-    value: node.id as string,
-    title: node.name as string,
-    children: node.children
-      ? convertToTreeSelectData(node.children as Record<string, unknown>[])
-      : undefined
-  }))
-}
-
-function filterCategoriesByType(
-  nodes: CategoryOption[],
-  type?: BillRecord['type']
-): CategoryOption[] {
-  if (!type) {
-    return nodes
-  }
-
-  return nodes
-    .filter(node => node.type === type)
-    .map(node => ({
-      ...node,
-      children: node.children ? filterCategoriesByType(node.children, type) : undefined
-    }))
-}
-
-function hasCategoryValue(nodes: CategoryOption[], value?: string) {
-  if (!value) {
-    return false
-  }
-
-  return nodes.some(node => {
-    if (node.value === value) {
-      return true
-    }
-
-    return node.children ? hasCategoryValue(node.children, value) : false
-  })
-}
-
 export default function BillsPage() {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<BillRecord[]>([])
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0 })
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [billModalState, setBillModalState] = useState<{
+    open: boolean
+    mode: 'create' | 'edit'
+    initialValues?: BillModalValues
+  }>({ open: false, mode: 'create' })
   const [categoryTree, setCategoryTree] = useState<CategoryOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
-  const [form] = Form.useForm()
   const [filterForm] = Form.useForm()
-  const currentType = Form.useWatch<BillRecord['type']>('type', form) ?? 'EXPENSE'
-  const currentFilterType = Form.useWatch<BillRecord['type'] | undefined>('type', filterForm)
-
-  // 筛选条件
+  const currentFilterType = Form.useWatch<BillType | undefined>('type', filterForm)
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
-  const filteredCategoryTree = filterCategoriesByType(categoryTree, currentType)
   const filteredSearchCategoryTree = filterCategoriesByType(categoryTree, currentFilterType)
-  const discountLabel = currentType === 'INCOME' ? '手续费/扣除' : '优惠金额'
-  const actualAmountLabel = currentType === 'INCOME' ? '到账金额' : '实付金额'
-  const categoryPlaceholder = currentType === 'INCOME' ? '请选择收入分类' : '请选择支出分类'
 
   const loadBills = useCallback(async () => {
     setLoading(true)
@@ -146,14 +81,16 @@ export default function BillsPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.pageSize, filters, message])
+  }, [filters, message, pagination.page, pagination.pageSize])
 
   const loadMetadata = useCallback(async () => {
     const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
-    if (catRes.success)
+    if (catRes.success) {
       setCategoryTree(convertToCategoryTreeSelectData(catRes.data as Record<string, unknown>[]))
-    if (tagRes.success)
+    }
+    if (tagRes.success) {
       setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
+    }
   }, [])
 
   useEffect(() => {
@@ -187,29 +124,6 @@ export default function BillsPage() {
     setPagination(prev => ({ ...prev, page: 1 }))
   }
 
-  const handleFormValuesChange = (
-    changedValues: Record<string, unknown>,
-    allValues: Record<string, unknown>
-  ) => {
-    if ('type' in changedValues) {
-      const availableCategories = filterCategoriesByType(
-        categoryTree,
-        allValues.type as BillRecord['type'] | undefined
-      )
-      const currentCategoryId = form.getFieldValue('categoryId') as string | undefined
-
-      if (currentCategoryId && !hasCategoryValue(availableCategories, currentCategoryId)) {
-        form.setFieldValue('categoryId', undefined)
-      }
-    }
-
-    if ('amount' in changedValues || 'discount' in changedValues) {
-      const amount = Number(allValues.amount || 0)
-      const discount = Number(allValues.discount || 0)
-      form.setFieldValue('actualAmount', amount - discount)
-    }
-  }
-
   const handleFilterValuesChange = (
     changedValues: Record<string, unknown>,
     allValues: Record<string, unknown>
@@ -220,7 +134,7 @@ export default function BillsPage() {
 
     const availableCategories = filterCategoriesByType(
       categoryTree,
-      allValues.type as BillRecord['type'] | undefined
+      allValues.type as BillType | undefined
     )
     const currentCategoryId = filterForm.getFieldValue('categoryId') as string | undefined
 
@@ -230,32 +144,41 @@ export default function BillsPage() {
   }
 
   const handleAdd = () => {
-    setEditingId(null)
-    form.resetFields()
-    form.setFieldsValue({ type: 'EXPENSE', discount: 0, source: 'MANUAL' })
-    setModalOpen(true)
+    setBillModalState({ open: true, mode: 'create' })
   }
 
   const handleEdit = (record: BillRecord) => {
-    setEditingId(record.id)
-    form.setFieldsValue({
-      date: dayjs(record.date),
-      type: record.type,
-      amount: Number(record.amount),
-      discount: Number(record.discount),
-      actualAmount: Number(record.actualAmount),
-      remark: record.remark,
-      categoryId: record.category?.id,
-      tagIds: record.tags?.map(t => t.id) || []
+    setBillModalState({
+      open: true,
+      mode: 'edit',
+      initialValues: {
+        id: record.id,
+        date: dayjs(record.date).format('YYYY-MM-DD'),
+        type: record.type,
+        amount: Number(record.amount),
+        discount: Number(record.discount),
+        actualAmount: Number(record.actualAmount),
+        remark: record.remark,
+        categoryId: record.category?.id,
+        tagIds: record.tags.map(tag => tag.id)
+      }
     })
-    setModalOpen(true)
+  }
+
+  const handleBillModalSuccess = async () => {
+    setBillModalState({ open: false, mode: 'create' })
+    await loadBills()
+  }
+
+  const handleBillModalCancel = () => {
+    setBillModalState({ open: false, mode: 'create' })
   }
 
   const handleDelete = async (id: string) => {
     const res = await deleteBill(id)
     if (res.success) {
       message.success('删除成功')
-      loadBills()
+      await loadBills()
     } else {
       message.error(res.error || '删除失败')
     }
@@ -270,7 +193,7 @@ export default function BillsPage() {
     try {
       const deletePromises = selectedRowKeys.map(id => deleteBill(id as string))
       const results = await Promise.all(deletePromises)
-      const successCount = results.filter(r => r.success).length
+      const successCount = results.filter(result => result.success).length
       const failCount = results.length - successCount
 
       if (failCount === 0) {
@@ -280,51 +203,9 @@ export default function BillsPage() {
       }
 
       setSelectedRowKeys([])
-      loadBills()
+      await loadBills()
     } catch {
       message.error('批量删除失败')
-    }
-  }
-
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields()
-      const normalizedTagIds = Array.isArray(values.tagIds)
-        ? values.tagIds
-            .map(v => (typeof v === 'string' ? v : (v as { value?: string }).value))
-            .filter((v: unknown): v is string => typeof v === 'string' && v.length > 0)
-        : undefined
-      const data = {
-        ...values,
-        date: values.date.format('YYYY-MM-DD'),
-        actualAmount: values.actualAmount ?? values.amount - (values.discount || 0),
-        tagIds: normalizedTagIds
-      }
-
-      // 清理空的 categoryId 和 tagIds，避免 UUID 验证失败
-      if (!data.categoryId) {
-        delete data.categoryId
-      }
-      if (!data.tagIds || data.tagIds.length === 0) {
-        delete data.tagIds
-      }
-
-      let res
-      if (editingId) {
-        res = await updateBill(editingId, data)
-      } else {
-        res = await createBill(data)
-      }
-
-      if (res.success) {
-        message.success(editingId ? '更新成功' : '创建成功')
-        setModalOpen(false)
-        loadBills()
-      } else {
-        message.error(res.error || '操作失败')
-      }
-    } catch {
-      // 表单验证失败
     }
   }
 
@@ -381,7 +262,7 @@ export default function BillsPage() {
       key: 'tags',
       width: 200,
       render: (tags: BillRecord['tags']) =>
-        tags?.map(tag => (
+        tags.map(tag => (
           <Tag key={tag.id} color={tag.color || undefined}>
             {tag.name}
           </Tag>
@@ -415,7 +296,6 @@ export default function BillsPage() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* 筛选栏 */}
       <div style={{ marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 8 }}>
         <Form
           form={filterForm}
@@ -462,7 +342,6 @@ export default function BillsPage() {
         </Form>
       </div>
 
-      {/* 操作栏 */}
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
         <Space>
           {selectedRowKeys.length > 0 && (
@@ -485,7 +364,6 @@ export default function BillsPage() {
         </Button>
       </div>
 
-      {/* 表格 */}
       <Table
         columns={columns}
         dataSource={bills}
@@ -511,66 +389,13 @@ export default function BillsPage() {
         scroll={{ x: 1000, y: 'calc(100vh - 400px)' }}
       />
 
-      {/* 新增/编辑弹窗 */}
-      <Modal
-        title={editingId ? '编辑账单' : '新增账单'}
-        open={modalOpen}
-        onOk={handleSubmit}
-        onCancel={() => setModalOpen(false)}
-        width={600}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical" onValuesChange={handleFormValuesChange}>
-          <Form.Item name="date" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="type" label="类型" rules={[{ required: true }]}>
-            <Select
-              options={[
-                { label: '支出', value: 'EXPENSE' },
-                { label: '收入', value: 'INCOME' }
-              ]}
-            />
-          </Form.Item>
-          <Space style={{ width: '100%' }} styles={{ item: { flex: 1 } }}>
-            <Form.Item
-              name="amount"
-              label="金额"
-              rules={[{ required: true, message: '请输入金额' }]}
-              style={{ flex: 1 }}
-            >
-              <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="discount" label={discountLabel} style={{ flex: 1 }}>
-              <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="actualAmount" label={actualAmountLabel} style={{ flex: 1 }}>
-              <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
-            </Form.Item>
-          </Space>
-          <Form.Item name="categoryId" label="分类">
-            <TreeSelect
-              allowClear
-              placeholder={categoryPlaceholder}
-              treeData={filteredCategoryTree}
-            />
-          </Form.Item>
-          <Form.Item name="tagIds" label="标签">
-            <TreeSelect
-              allowClear
-              multiple
-              placeholder="请选择标签"
-              treeData={tagTree}
-              treeCheckable
-              treeCheckStrictly
-              showCheckedStrategy={TreeSelect.SHOW_PARENT}
-            />
-          </Form.Item>
-          <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={3} placeholder="请输入备注" />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <BillModal
+        open={billModalState.open}
+        mode={billModalState.mode}
+        initialValues={billModalState.initialValues}
+        onCancel={handleBillModalCancel}
+        onSuccess={handleBillModalSuccess}
+      />
     </div>
   )
 }
