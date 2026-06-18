@@ -49,11 +49,15 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# 拷贝 Prisma 结构及配置以供运行时部署表结构
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
+
 USER nextjs
 
 EXPOSE 3000
 
 ENV PORT=3000
 
-# server.js is created by next build from the standalone output
-CMD ["node", "server.js"]
+# 启动 Web 前，先自动同步数据库表结构，安全导入初始种子数据，再启动服务
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node prisma/seed.js && node server.js"]
