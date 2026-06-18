@@ -44,18 +44,18 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# 拷贝依赖文件并安装完整的生产环境依赖，确保生产环境也有完整的 Prisma CLI 及其深层依赖（如 valibot）
+COPY package.json package-lock.json* ./
+RUN npm ci --only=production
 
 # 拷贝 Prisma 结构及配置以供运行时部署表结构
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
 
-# 拷贝本地 prisma CLI 及其依赖，防止容器启动时联网下载
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
@@ -64,4 +64,4 @@ EXPOSE 3000
 ENV PORT=3000
 
 # 启动 Web 前，先自动同步数据库表结构，安全导入初始种子数据，再启动服务
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --accept-data-loss && node prisma/seed.js && node server.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node prisma/seed.js && node server.js"]
