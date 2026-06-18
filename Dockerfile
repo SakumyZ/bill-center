@@ -63,5 +63,5 @@ EXPOSE 3000
 
 ENV PORT=3000
 
-# 启动 Web 前，先自动同步数据库表结构，安全导入初始种子数据，再启动服务
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node prisma/seed.js && node server.js"]
+# 启动 Web 前，先通过 Shell 拼接导出 DATABASE_URL，然后同步数据库表结构，安全导入初始种子数据，再启动服务
+CMD ["sh", "-c", "export DATABASE_URL=\"postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres_secure_pwd}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-bill_center}?schema=public\" && npx prisma db push --accept-data-loss && node prisma/seed.js && node server.js"]
