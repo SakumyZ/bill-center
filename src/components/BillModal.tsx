@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { Modal, Form, DatePicker, Select, Space, InputNumber, TreeSelect, Input, App } from 'antd'
 import dayjs from 'dayjs'
 import { createBill, fetchCategories, fetchTags, updateBill } from '@/lib/api-client'
+import { Icon } from '@iconify/react'
 import {
   BillModalValues,
   BillType,
@@ -67,7 +68,7 @@ export default function BillModal({
 
     form.resetFields()
 
-    if (mode === 'edit' && initialValues) {
+    if (initialValues) {
       form.setFieldsValue({
         ...initialValues,
         date: dayjs(initialValues.date),
@@ -81,7 +82,7 @@ export default function BillModal({
     }
 
     form.setFieldsValue({ type: 'EXPENSE', discount: 0, source: 'MANUAL' })
-  }, [form, initialValues, mode, open])
+  }, [form, initialValues, open])
 
   const handleValuesChange = (
     changedValues: Record<string, unknown>,
@@ -145,6 +146,20 @@ export default function BillModal({
     }
   }
 
+  const mapTreeDataWithIcon = (nodes: CategoryOption[]): any[] => {
+    return nodes.map(node => ({
+      value: node.value,
+      title: (
+        <Space size={4}>
+          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
+          <span>{node.title}</span>
+        </Space>
+      ),
+      searchValue: node.title as string,
+      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
+    }))
+  }
+
   return (
     <Modal
       title={mode === 'edit' ? '编辑账单' : '新增账单'}
@@ -187,7 +202,8 @@ export default function BillModal({
           <TreeSelect
             allowClear
             placeholder={categoryPlaceholder}
-            treeData={filteredCategoryTree}
+            treeData={mapTreeDataWithIcon(filteredCategoryTree)}
+            treeNodeFilterProp="searchValue"
           />
         </Form.Item>
         <Form.Item name="tagIds" label="标签">

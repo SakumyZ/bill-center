@@ -15,7 +15,8 @@ import {
   TreeSelect,
   Statistic,
   Row,
-  Col
+  Col,
+  Progress
 } from 'antd'
 import {
   UploadOutlined,
@@ -30,10 +31,14 @@ import {
   fetchCategories,
   fetchTags
 } from '@/lib/api-client'
+import { Icon } from '@iconify/react'
 
 interface TreeOption {
   value: string
   title: string
+  icon?: string
+  color?: string
+  type?: 'INCOME' | 'EXPENSE'
   children?: TreeOption[]
 }
 
@@ -67,6 +72,9 @@ function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[]
   return nodes.map(node => ({
     value: node.id as string,
     title: node.name as string,
+    icon: node.icon as string | undefined,
+    color: node.color as string | undefined,
+    type: node.type as 'INCOME' | 'EXPENSE' | undefined,
     children: node.children
       ? convertToTreeSelectData(node.children as Record<string, unknown>[])
       : undefined
@@ -82,9 +90,33 @@ export default function UploadPage() {
   const [errors, setErrors] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
   const [analyzingAI, setAnalyzingAI] = useState(false)
+  const [aiProgress, setAiProgress] = useState(0)
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null)
   const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
   const [tagTree, setTagTree] = useState<TreeOption[]>([])
+
+  const mapTreeDataWithIcon = (nodes: TreeOption[]): any[] => {
+    return nodes.map(node => ({
+      value: node.value,
+      title: (
+        <Space size={4}>
+          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
+          <span>{node.title}</span>
+        </Space>
+      ),
+      searchValue: node.title as string,
+      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
+    }))
+  }
+
+  const filterTreeDataByType = (nodes: TreeOption[], type: 'INCOME' | 'EXPENSE'): TreeOption[] => {
+    return nodes
+      .filter(node => !node.type || node.type === type)
+      .map(node => ({
+        ...node,
+        children: node.children ? filterTreeDataByType(node.children, type) : undefined
+      }))
+  }
 
   const loadMetadata = useCallback(async () => {
     const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
@@ -209,6 +241,7 @@ export default function UploadPage() {
     }
 
     setAnalyzingAI(true)
+    setAiProgress(0)
     try {
       // 只发送需要分析的账单给 AI
       const billsForAI = needAnalysis.map((item, idx) => ({
@@ -219,56 +252,101 @@ export default function UploadPage() {
         type: item.bill.type
       }))
 
-      const res = await analyzeWithAI(
-        billsForAI.map(b => ({
-          remark: b.remark,
-          amount: b.amount,
-          type: b.type
-        }))
-      )
+      const response = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bills: billsForAI.map(b => ({
+            remark: b.remark,
+            amount: b.amount,
+            type: b.type
+          }))
+        })
+      })
 
-      if (res.success && Array.isArray(res.data)) {
-        const updated = [...previewBills]
-        for (const suggestion of res.data as Array<{
-          index: number
-          categoryId?: string
-          categoryName?: string
-          tagIds?: string[]
-          tagNames?: string[]
-          confidence?: number
-        }>) {
-          // 通过映射找到原始索引
-          const mapping = billsForAI[suggestion.index]
-          if (mapping) {
-            const originalIdx = mapping.originalIndex
-            updated[originalIdx] = {
-              ...updated[originalIdx],
-              aiCategoryId: suggestion.categoryId,
-              aiCategoryName: suggestion.categoryName,
-              aiTagIds: suggestion.tagIds,
-              aiTagNames: suggestion.tagNames,
-              aiConfidence: suggestion.confidence,
-              // 自动应用 AI 推荐（只覆盖空值）
-              categoryId: suggestion.categoryId || updated[originalIdx].categoryId,
-              tagIds:
-                suggestion.tagIds?.length && suggestion.tagIds.length > 0
-                  ? suggestion.tagIds
-                  : updated[originalIdx].tagIds
-            }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'AI 分析失败')
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('无法读取响应流')
+      }
+
+      const decoder = new TextDecoder()
+      let accumulatedText = ''
+      let done = false
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read()
+        done = readerDone
+        if (value) {
+          const chunkText = decoder.decode(value, { stream: !done })
+          accumulatedText += chunkText
+
+          // 匹配 JSON 中的 progress 键值，更新进度状态
+          const matches = [...accumulatedText.matchAll(/"progress"\s*:\s*(\d+)/g)]
+          if (matches.length > 0) {
+            const latestProgress = Math.min(Math.max(...matches.map(m => parseInt(m[1], 10))), 100)
+            setAiProgress(latestProgress)
           }
         }
-        setPreviewBills(updated)
-        message.success(
-          `AI 分析完成，处理 ${needAnalysis.length} 条记录（跳过 ${previewBills.length - needAnalysis.length} 条已有分类标签的记录）`
-        )
-      } else {
-        message.error(res.error || 'AI 分析失败')
-        console.log(res.error)
       }
-    } catch {
-      message.error('AI 分析失败')
+
+      let cleanContent = accumulatedText.trim()
+      if (cleanContent.startsWith('```json')) {
+        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/```\s*$/, '')
+      } else if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/```\s*$/, '')
+      }
+
+      const parsed = JSON.parse(cleanContent)
+      const resData = Array.isArray(parsed)
+        ? parsed
+        : parsed.suggestions || parsed.results || [parsed]
+
+      const updated = [...previewBills]
+      for (const suggestion of resData as Array<{
+        index: number
+        categoryId?: string
+        categoryName?: string
+        tagIds?: string[]
+        tagNames?: string[]
+        confidence?: number
+      }>) {
+        // 通过映射找到原始索引
+        const mapping = billsForAI[suggestion.index]
+        if (mapping) {
+          const originalIdx = mapping.originalIndex
+          updated[originalIdx] = {
+            ...updated[originalIdx],
+            aiCategoryId: suggestion.categoryId,
+            aiCategoryName: suggestion.categoryName,
+            aiTagIds: suggestion.tagIds,
+            aiTagNames: suggestion.tagNames,
+            aiConfidence: suggestion.confidence,
+            // 自动应用 AI 推荐（只覆盖空值）
+            categoryId: suggestion.categoryId || updated[originalIdx].categoryId,
+            tagIds:
+              suggestion.tagIds?.length && suggestion.tagIds.length > 0
+                ? suggestion.tagIds
+                : updated[originalIdx].tagIds
+          }
+        }
+      }
+      setPreviewBills(updated)
+      message.success(
+        `AI 分析完成，处理 ${needAnalysis.length} 条记录（跳过 ${previewBills.length - needAnalysis.length} 条已有分类标签的记录）`
+      )
+    } catch (error) {
+      console.error(error)
+      message.error(error instanceof Error ? error.message : 'AI 分析失败')
     } finally {
       setAnalyzingAI(false)
+      setAiProgress(100)
     }
   }
 
@@ -393,51 +471,104 @@ export default function UploadPage() {
       title: '分类',
       key: 'categoryId',
       width: 150,
-      render: (_: unknown, record: PreviewBill, index: number) => (
-        <div>
-          <TreeSelect
-            allowClear
-            size="small"
-            placeholder="选择分类"
-            style={{ width: '100%' }}
-            treeData={categoryTree}
-            value={record.categoryId}
-            onChange={val => handleBillChange(index, 'categoryId', val)}
-          />
-          {record.aiCategoryName && (
-            <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-              AI: {record.aiCategoryName} ({((record.aiConfidence || 0) * 100).toFixed(0)}%)
-            </div>
-          )}
-        </div>
-      )
+      render: (_: unknown, record: PreviewBill, index: number) => {
+        const isAiCategory = !!(record.aiCategoryId && record.categoryId === record.aiCategoryId)
+        return (
+          <div
+            style={{
+              padding: isAiCategory ? '4px 6px' : '0',
+              backgroundColor: isAiCategory ? '#fffbe6' : 'transparent',
+              border: isAiCategory ? '1px dashed #ffe58f' : '1px solid transparent',
+              borderRadius: '6px',
+              transition: 'all 0.3s'
+            }}
+          >
+            <TreeSelect
+              allowClear
+              size="small"
+              placeholder="选择分类"
+              style={{ width: '100%' }}
+              treeData={mapTreeDataWithIcon(filterTreeDataByType(categoryTree, record.type))}
+              value={record.categoryId}
+              onChange={val => handleBillChange(index, 'categoryId', val)}
+              treeNodeFilterProp="searchValue"
+            />
+            {record.aiCategoryName && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: isAiCategory ? '#d46b08' : '#999',
+                  marginTop: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                <RobotOutlined style={{ color: isAiCategory ? '#d46b08' : '#999' }} />
+                <span>
+                  AI: {record.aiCategoryName} ({((record.aiConfidence || 0) * 100).toFixed(0)}%)
+                </span>
+              </div>
+            )}
+          </div>
+        )
+      }
     },
     {
       title: '标签',
       key: 'tagIds',
       width: 180,
-      render: (_: unknown, record: PreviewBill, index: number) => (
-        <div>
-          <TreeSelect
-            allowClear
-            multiple
-            size="small"
-            placeholder="选择标签"
-            style={{ width: '100%' }}
-            treeData={tagTree}
-            treeCheckable
-            treeCheckStrictly
-            showCheckedStrategy={TreeSelect.SHOW_PARENT}
-            value={record.tagIds}
-            onChange={val => handleBillChange(index, 'tagIds', val)}
-          />
-          {record.aiTagNames && record.aiTagNames.length > 0 && (
-            <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-              AI: {record.aiTagNames.join(', ')}
-            </div>
-          )}
-        </div>
-      )
+      render: (_: unknown, record: PreviewBill, index: number) => {
+        const currentTagIds = (record.tagIds || [])
+          .map(v => (typeof v === 'string' ? v : (v as { value?: string }).value))
+          .filter((v): v is string => typeof v === 'string')
+        const isAiTags = !!(
+          record.aiTagIds &&
+          record.aiTagIds.length > 0 &&
+          currentTagIds.length === record.aiTagIds.length &&
+          currentTagIds.every(id => record.aiTagIds!.includes(id))
+        )
+        return (
+          <div
+            style={{
+              padding: isAiTags ? '4px 6px' : '0',
+              backgroundColor: isAiTags ? '#fffbe6' : 'transparent',
+              border: isAiTags ? '1px dashed #ffe58f' : '1px solid transparent',
+              borderRadius: '6px',
+              transition: 'all 0.3s'
+            }}
+          >
+            <TreeSelect
+              allowClear
+              multiple
+              size="small"
+              placeholder="选择标签"
+              style={{ width: '100%' }}
+              treeData={tagTree}
+              treeCheckable
+              treeCheckStrictly
+              showCheckedStrategy={TreeSelect.SHOW_PARENT}
+              value={record.tagIds}
+              onChange={val => handleBillChange(index, 'tagIds', val)}
+            />
+            {record.aiTagNames && record.aiTagNames.length > 0 && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: isAiTags ? '#d46b08' : '#999',
+                  marginTop: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}
+              >
+                <RobotOutlined style={{ color: isAiTags ? '#d46b08' : '#999' }} />
+                <span>AI: {record.aiTagNames.join(', ')}</span>
+              </div>
+            )}
+          </div>
+        )
+      }
     }
   ]
 
@@ -486,6 +617,12 @@ export default function UploadPage() {
               {errors.length > 0 && <Tag color="red">{errors.length} 条解析错误</Tag>}
             </Space>
             <Space>
+              {analyzingAI && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 220 }}>
+                  <Progress percent={aiProgress} size="small" status="active" />
+                  <span style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>AI 分析中...</span>
+                </div>
+              )}
               <Button icon={<RobotOutlined />} loading={analyzingAI} onClick={handleAIAnalyze}>
                 AI 智能分类
               </Button>

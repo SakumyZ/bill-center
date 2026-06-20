@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const configs = await prisma.systemConfig.findMany({
       where: {
         key: {
-          in: ['ai_enabled', 'ai_api_key', 'ai_base_url', 'ai_model']
+          in: ['ai_enabled', 'ai_api_key', 'ai_base_url', 'ai_model', 'ai_guidance']
         }
       }
     })
@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     configs.forEach(cfg => {
       configMap[cfg.key] = cfg.value
     })
+
+    const aiGuidance = configMap['ai_guidance'] || ''
 
     const isEnabled = configMap['ai_enabled'] ?? 'true' // 默认开启
     const apiKey = configMap['ai_api_key'] || process.env.OPENAI_API_KEY
@@ -64,7 +66,13 @@ export async function POST(request: NextRequest) {
     })
 
     const prompt = `你是一个个人财务记账助手。请根据以下账单信息，为每条账单推荐最合适的分类和标签。
-
+${aiGuidance ? `
+【用户自定义匹配引导规则】
+如果账单的备注(remark)或内容包含指定的关键字，你必须严格优先归类到指定的分类和标签。
+规则格式为：关键字-分类-标签（每行一条）
+用户配置的规则列表如下：
+${aiGuidance}
+` : ''}
 可用分类列表：
 ${categories.map(c => `- ${c.name} (id: ${c.id}, 类型: ${c.type})`).join('\n')}
 
@@ -83,7 +91,8 @@ ${bills.map((b, i) => `${i + 1}. 备注: "${b.remark}", 金额: ${b.amount}, 类
     "tagIds": ["推荐的标签ID数组"],
     "tagNames": ["标签名称数组"],
     "confidence": 0.9,
-    "reason": "推荐理由"
+    "reason": "推荐理由",
+    "progress": 20
   }
 ]
 
@@ -91,42 +100,39 @@ ${bills.map((b, i) => `${i + 1}. 备注: "${b.remark}", 金额: ${b.amount}, 类
 1. 分类的类型(INCOME/EXPENSE)必须与账单类型匹配
 2. 如果没有合适的分类或标签，对应字段返回 null 或空数组
 3. confidence 为 0-1 之间的置信度
-4. 直接返回 JSON 数组，不要包含任何解释或 markdown 标记`
+4. 每个返回的账单对象中必须包含一个 "progress" 属性，其值为当前进度占总账单数量的百分比整数值。计算公式为：Math.round(((当前账单索引 + 1) / 总账单数量) * 100)。
+5. 直接返回包含以上对象的 JSON 数组，不要包含任何 markdown 代码块、解释或进度标记。整个回复必须是合法的 JSON 数组，以便直接解析。`
 
-    const completion = await openai.chat.completions.create({
+    const responseStream = await openai.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3
+      temperature: 0.3,
+      stream: true
     })
 
-    console.log('[AI 分析] 请求成功，开始处理响应...')
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
-      return errorResponse('AI 未返回有效结果')
-    }
-
-    let suggestions
-    try {
-      // 清理可能的 markdown 代码块标记
-      let cleanContent = content.trim()
-      if (cleanContent.startsWith('```json')) {
-        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/```\s*$/, '')
-      } else if (cleanContent.startsWith('```')) {
-        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/```\s*$/, '')
+    const encoder = new TextEncoder()
+    const customStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of responseStream) {
+            const text = chunk.choices[0]?.delta?.content || ''
+            if (text) {
+              controller.enqueue(encoder.encode(text))
+            }
+          }
+          controller.close()
+        } catch (err) {
+          controller.error(err)
+        }
       }
+    })
 
-      const parsed = JSON.parse(cleanContent)
-      // 兼容多种返回格式
-      suggestions = Array.isArray(parsed)
-        ? parsed
-        : parsed.suggestions || parsed.results || [parsed]
-      console.log('[AI 分析] 解析成功，共 ' + suggestions.length + ' 条建议')
-    } catch (error) {
-      console.error('JSON 解析失败，内容:', content)
-      return errorResponse('AI 返回格式解析失败: ' + (error as Error).message)
-    }
-
-    return successResponse(suggestions)
+    return new Response(customStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked'
+      }
+    })
   } catch (error) {
     console.error('AI 分析失败:', error)
     const err = error as any

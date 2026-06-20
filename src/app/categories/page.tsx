@@ -19,7 +19,8 @@ import {
   Tag
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
-import { fetchCategories, createCategory, updateCategory, deleteCategory } from '@/lib/api-client'
+import { Icon } from '@iconify/react'
+import { fetchCategories, createCategory, updateCategory, deleteCategory, reorderCategories } from '@/lib/api-client'
 
 interface CategoryNode {
   id: string
@@ -30,6 +31,101 @@ interface CategoryNode {
   sort: number
   parentId?: string
   children?: CategoryNode[]
+}
+
+interface IconPickerProps {
+  value?: string
+  onChange?: (value: string) => void
+}
+
+const COMMON_ICONS = [
+  { name: '餐饮', icon: 'mdi:food' },
+  { name: '购物', icon: 'mdi:cart' },
+  { name: '住房', icon: 'mdi:home' },
+  { name: '交通', icon: 'mdi:bus' },
+  { name: '娱乐', icon: 'mdi:gamepad-variant' },
+  { name: '工资', icon: 'mdi:cash' },
+  { name: '理财', icon: 'mdi:trending-up' },
+  { name: '医疗', icon: 'mdi:hospital-building' },
+  { name: '运动', icon: 'mdi:dumbbell' },
+  { name: '旅行', icon: 'mdi:airplane' },
+  { name: '学习', icon: 'mdi:book-open-variant' },
+  { name: '数码', icon: 'mdi:laptop' },
+  { name: '人情', icon: 'mdi:gift' },
+  { name: '水电', icon: 'mdi:flash' },
+  { name: '宠物', icon: 'mdi:cat' }
+]
+
+function IconPicker({ value = '', onChange }: IconPickerProps) {
+  const [previewError, setPreviewError] = useState(false)
+
+  useEffect(() => {
+    setPreviewError(false)
+  }, [value])
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Input
+          placeholder="例如 mdi:food（可从 icones.js.org 复制）"
+          value={value}
+          onChange={e => onChange?.(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        {value && (
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              border: '1px solid #d9d9d9',
+              borderRadius: 6,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#f5f5f5'
+            }}
+          >
+            {!previewError ? (
+              <Icon
+                icon={value}
+                style={{ fontSize: 20 }}
+                onError={() => setPreviewError(true)}
+              />
+            ) : (
+              <span style={{ fontSize: 10, color: '#ff4d4f' }}>失效</span>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* 常用图标面板 */}
+      <div style={{ background: '#f8fafc', padding: 8, borderRadius: 6, border: '1px solid #f1f5f9' }}>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>推荐图标：</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {COMMON_ICONS.map(item => (
+            <Tag.CheckableTag
+              key={item.icon}
+              checked={value === item.icon}
+              onChange={() => onChange?.(item.icon)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 6px',
+                border: '1px solid #e2e8f0',
+                borderRadius: 4,
+                margin: 0,
+                background: value === item.icon ? undefined : '#fff'
+              }}
+            >
+              <Icon icon={item.icon} />
+              <span>{item.name}</span>
+            </Tag.CheckableTag>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function CategoriesPage() {
@@ -44,6 +140,9 @@ export default function CategoriesPage() {
   const [activeType, setActiveType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE')
   const [flatCategories, setFlatCategories] = useState<CategoryNode[]>([])
   const [form] = Form.useForm()
+
+  const currentParentId = Form.useWatch('parentId', form)
+  const isFirstLevel = !currentParentId
 
   const loadCategories = useCallback(async () => {
     setLoading(true)
@@ -138,6 +237,114 @@ export default function CategoriesPage() {
     }
   }
 
+  const handleDrop = async (info: any) => {
+    const dropKey = info.node.key as string
+    const dragKey = info.dragNode.key as string
+    const dropPos = info.node.pos.split('-')
+    const dropPosition = info.dropPosition - Number(dropPos[dropPos.length - 1])
+
+    const data = JSON.parse(JSON.stringify(categories)) as CategoryNode[]
+
+    let dragObj: CategoryNode | undefined
+    const removeNode = (nodes: CategoryNode[], id: string): boolean => {
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) {
+          dragObj = nodes[i]
+          nodes.splice(i, 1)
+          return true
+        }
+        if (nodes[i].children && removeNode(nodes[i].children!, id)) {
+          return true
+        }
+      }
+      return false
+    }
+    removeNode(data, dragKey)
+
+    if (!dragObj) return
+
+    if (!info.dropToGap) {
+      const insertInside = (nodes: CategoryNode[], id: string): boolean => {
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodes[i].id === id) {
+            nodes[i].children = nodes[i].children || []
+            nodes[i].children!.push(dragObj!)
+            return true
+          }
+          if (nodes[i].children && insertInside(nodes[i].children!, id)) {
+            return true
+          }
+        }
+        return false
+      }
+      insertInside(data, dropKey)
+    } else {
+      const insertAtGap = (nodes: CategoryNode[], id: string): boolean => {
+        for (let i = 0; i < nodes.length; i++) {
+          if (nodes[i].id === id) {
+            if (dropPosition === -1) {
+              nodes.splice(i, 0, dragObj!)
+            } else {
+              nodes.splice(i + 1, 0, dragObj!)
+            }
+            return true
+          }
+          if (nodes[i].children && insertAtGap(nodes[i].children!, id)) {
+            return true
+          }
+        }
+        return false
+      }
+      insertAtGap(data, dropKey)
+    }
+
+    interface UpdateItem {
+      id: string
+      parentId: string | null
+      sort: number
+    }
+    const updates: UpdateItem[] = []
+
+    const getUpdates = (nodes: CategoryNode[], pId: string | null = null) => {
+      nodes.forEach((node, index) => {
+        const original = flatCategories.find(c => c.id === node.id)
+        const currentParentId = pId
+        const currentSort = index
+        const originalParentId = original?.parentId || null
+
+        if (originalParentId !== currentParentId || original?.sort !== currentSort) {
+          updates.push({
+            id: node.id,
+            parentId: currentParentId,
+            sort: currentSort
+          })
+        }
+        if (node.children && node.children.length > 0) {
+          getUpdates(node.children, node.id)
+        }
+      })
+    }
+
+    getUpdates(data, null)
+
+    if (updates.length === 0) return
+
+    setLoading(true)
+    try {
+      const res = await reorderCategories(updates)
+      if (res.success) {
+        message.success('排序更新成功')
+        await loadCategories()
+      } else {
+        message.error(res.error || '排序更新失败')
+      }
+    } catch {
+      message.error('排序更新失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const renderTreeNodes = (nodes: CategoryNode[]): React.ReactNode[] =>
     nodes.map(node => (
       <Tree.TreeNode
@@ -154,6 +361,9 @@ export default function CategoriesPage() {
                   backgroundColor: node.color
                 }}
               />
+            )}
+            {!node.parentId && node.icon && node.icon.includes(':') && (
+              <Icon icon={node.icon} style={{ fontSize: 16, display: 'flex', alignItems: 'center' }} />
             )}
             <span>{node.name}</span>
             <Button
@@ -237,9 +447,12 @@ export default function CategoriesPage() {
           <Spin spinning={loading}>
             {categories.length > 0 ? (
               <Tree
+                draggable
+                blockNode
                 showLine
                 expandedKeys={expandedKeys}
                 onExpand={keys => setExpandedKeys(keys as string[])}
+                onDrop={handleDrop}
               >
                 {renderTreeNodes(categories)}
               </Tree>
@@ -285,9 +498,11 @@ export default function CategoriesPage() {
           <Form.Item name="color" label="颜色">
             <ColorPicker />
           </Form.Item>
-          <Form.Item name="icon" label="图标">
-            <Input placeholder="图标标识" maxLength={50} />
-          </Form.Item>
+          {isFirstLevel && (
+            <Form.Item name="icon" label="一级分类图标">
+              <IconPicker />
+            </Form.Item>
+          )}
           <Form.Item name="sort" label="排序">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>

@@ -71,7 +71,8 @@ export default function SettingsPage() {
           ai_enabled: res.data.ai_enabled === 'true',
           ai_api_key: res.data.ai_api_key,
           ai_base_url: res.data.ai_base_url,
-          ai_model: res.data.ai_model
+          ai_model: res.data.ai_model,
+          ai_guidance: res.data.ai_guidance || ''
         })
       } else {
         message.error(res.error || '加载配置失败')
@@ -92,6 +93,7 @@ export default function SettingsPage() {
     ai_api_key?: string
     ai_base_url?: string
     ai_model?: string
+    ai_guidance?: string
   }) => {
     setSaving(true)
     try {
@@ -99,7 +101,8 @@ export default function SettingsPage() {
         ai_enabled: values.ai_enabled ? 'true' : 'false',
         ai_api_key: values.ai_api_key || '',
         ai_base_url: values.ai_base_url || '',
-        ai_model: values.ai_model || ''
+        ai_model: values.ai_model || '',
+        ai_guidance: values.ai_guidance || ''
       }
 
       const res = await updateSystemConfigs(payload)
@@ -238,6 +241,39 @@ export default function SettingsPage() {
                       tooltip="所指定的模型名称，请确认识别效率与计费成本平衡"
                     >
                       <Input placeholder="例如: gpt-3.5-turbo 或 LongCat-Flash-Lite" size="large" />
+                    </Form.Item>
+
+                    <Title level={5} style={{ marginTop: 24, marginBottom: 16, display: 'flex', alignItems: 'center' }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: 4,
+                          height: 14,
+                          borderRadius: 2,
+                          background: '#1677ff',
+                          marginRight: 8
+                        }}
+                      />
+                      AI 引导提示词
+                    </Title>
+
+                    <Form.Item
+                      name="ai_guidance"
+                      label="自定义分类与标签引导规则"
+                      tooltip="配置用于纠正 AI 分类和标签混淆的引导词。当账单备注中包含关键字时，AI 会优先归类到指定分类和标签。"
+                      extra={
+                        <div style={{ marginTop: 8, fontSize: '13px', color: '#8c8c8c' }}>
+                          <div>规则模板：<strong>关键字-分类-标签</strong>（每行一个）</div>
+                          <div>例如：<strong>包子-早餐-餐饮</strong></div>
+                          <div>如果某个关键字不需要标签，可留空，如：<strong>包子-早餐-</strong></div>
+                        </div>
+                      }
+                    >
+                      <Input.TextArea
+                        placeholder="请输入引导词规则，例如：&#13;包子-早餐-餐饮&#13;理发-个人护理-生活服务"
+                        rows={4}
+                        size="large"
+                      />
                     </Form.Item>
                   </div>
                 )

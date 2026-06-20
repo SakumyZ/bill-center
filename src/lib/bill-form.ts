@@ -3,6 +3,8 @@ export type BillType = 'INCOME' | 'EXPENSE'
 export interface TreeOption {
   value: string
   title: string
+  icon?: string
+  color?: string
   children?: TreeOption[]
 }
 
@@ -31,6 +33,8 @@ export function convertToCategoryTreeSelectData(
     value: node.id as string,
     title: node.name as string,
     type: node.type as BillType,
+    icon: node.icon as string | undefined,
+    color: node.color as string | undefined,
     children: node.children
       ? convertToCategoryTreeSelectData(node.children as Record<string, unknown>[])
       : undefined
@@ -41,6 +45,8 @@ export function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeO
   return nodes.map(node => ({
     value: node.id as string,
     title: node.name as string,
+    icon: node.icon as string | undefined,
+    color: node.color as string | undefined,
     children: node.children
       ? convertToTreeSelectData(node.children as Record<string, unknown>[])
       : undefined

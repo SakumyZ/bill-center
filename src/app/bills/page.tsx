@@ -14,8 +14,9 @@ import {
   Popconfirm,
   TreeSelect
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { Icon } from '@iconify/react'
 import { fetchBills, deleteBill, fetchCategories, fetchTags } from '@/lib/api-client'
 import BillModal from '@/components/BillModal'
 import {
@@ -40,7 +41,7 @@ interface BillRecord {
   actualAmount: number
   remark?: string
   source: string
-  category?: { id: string; name: string; color?: string }
+  category?: { id: string; name: string; color?: string; icon?: string }
   tags: Array<{ id: string; name: string; color?: string }>
 }
 
@@ -61,6 +62,20 @@ export default function BillsPage() {
   const currentFilterType = Form.useWatch<BillType | undefined>('type', filterForm)
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
   const filteredSearchCategoryTree = filterCategoriesByType(categoryTree, currentFilterType)
+
+  const mapTreeDataWithIcon = (nodes: CategoryOption[]): any[] => {
+    return nodes.map(node => ({
+      value: node.value,
+      title: (
+        <Space size={4}>
+          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
+          <span>{node.title}</span>
+        </Space>
+      ),
+      searchValue: node.title as string,
+      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
+    }))
+  }
 
   const loadBills = useCallback(async () => {
     setLoading(true)
@@ -165,6 +180,23 @@ export default function BillsPage() {
     })
   }
 
+  const handleCopy = (record: BillRecord) => {
+    setBillModalState({
+      open: true,
+      mode: 'create',
+      initialValues: {
+        date: dayjs(record.date).format('YYYY-MM-DD'),
+        type: record.type,
+        amount: Number(record.amount),
+        discount: Number(record.discount),
+        actualAmount: Number(record.actualAmount),
+        remark: record.remark,
+        categoryId: record.category?.id,
+        tagIds: record.tags.map(tag => tag.id)
+      }
+    })
+  }
+
   const handleBillModalSuccess = async () => {
     setBillModalState({ open: false, mode: 'create' })
     await loadBills()
@@ -254,7 +286,16 @@ export default function BillsPage() {
       key: 'category',
       width: 100,
       render: (category: BillRecord['category']) =>
-        category ? <Tag color={category.color || undefined}>{category.name}</Tag> : '-'
+        category ? (
+          <Tag color={category.color || undefined}>
+            <Space size={4}>
+              {category.icon && category.icon.includes(':') && <Icon icon={category.icon} />}
+              <span>{category.name}</span>
+            </Space>
+          </Tag>
+        ) : (
+          '-'
+        )
     },
     {
       title: '标签',
@@ -285,9 +326,17 @@ export default function BillsPage() {
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            title="编辑"
+          />
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopy(record)}
+            title="复制"
           />
           <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+            <Button type="link" size="small" danger icon={<DeleteOutlined />} title="删除" />
           </Popconfirm>
         </Space>
       )
@@ -322,7 +371,8 @@ export default function BillsPage() {
               allowClear
               placeholder="全部"
               style={{ width: 150 }}
-              treeData={filteredSearchCategoryTree}
+              treeData={mapTreeDataWithIcon(filteredSearchCategoryTree)}
+              treeNodeFilterProp="searchValue"
             />
           </Form.Item>
           <Form.Item name="tagId" label="标签">

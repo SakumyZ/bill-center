@@ -40,6 +40,13 @@ export async function deleteCategory(id: string) {
   return request(`/api/categories/${id}`, { method: 'DELETE' })
 }
 
+export async function reorderCategories(updates: Array<{ id: string; parentId: string | null; sort: number }>) {
+  return request<{ updatedCount: number }>('/api/categories/reorder', {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  })
+}
+
 // ============ 标签 API ============
 
 export async function fetchTags(params?: { flat?: boolean }) {

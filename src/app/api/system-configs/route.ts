@@ -8,9 +8,10 @@ export async function GET(request: NextRequest) {
     // 默认配置（来自环境变量）
     const defaults = {
       ai_enabled: 'true',
-      ai_api_key: process.env.OPENAI_API_KEY || '',
-      ai_base_url: process.env.OPENAI_BASE_URL || 'https://api.longcat.chat/openai',
-      ai_model: process.env.OPENAI_MODEL || 'LongCat-Flash-Lite'
+      ai_api_key: process.env.OPENAI_API_KEY,
+      ai_base_url: process.env.OPENAI_BASE_URL,
+      ai_model: process.env.OPENAI_MODEL,
+      ai_guidance: ''
     }
 
     // 从数据库读取已有的配置
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest) {
       ai_enabled: configMap['ai_enabled'] ?? defaults.ai_enabled,
       ai_api_key: realApiKey,
       ai_base_url: configMap['ai_base_url'] ?? defaults.ai_base_url,
-      ai_model: configMap['ai_model'] ?? defaults.ai_model
+      ai_model: configMap['ai_model'] ?? defaults.ai_model,
+      ai_guidance: configMap['ai_guidance'] ?? defaults.ai_guidance
     }
 
     return successResponse(result)
@@ -42,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { configs } = (await request.json()) as { configs: Record<string, string> }
-    
+
     if (!configs || typeof configs !== 'object') {
       return errorResponse('参数格式错误，期望对象格式的 configs')
     }
