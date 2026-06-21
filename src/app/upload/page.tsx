@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useState } from 'react'
 import {
   Upload,
   Button,
@@ -26,12 +26,11 @@ import {
 } from '@ant-design/icons'
 import {
   previewUpload,
-  confirmUpload,
-  analyzeWithAI,
-  fetchCategories,
-  fetchTags
-} from '@/lib/api-client'
-import { Icon } from '@iconify/react'
+  confirmUpload
+} from '@/lib/api'
+import { useMetadata } from '@/hooks/useMetadata'
+import { streamAIAnalyze } from '@/lib/services/ai-service'
+import CategorySelect from '@/components/CategorySelect'
 
 interface TreeOption {
   value: string
@@ -68,18 +67,7 @@ interface PreviewBill {
   aiConfidence?: number
 }
 
-function convertToTreeSelectData(nodes: Record<string, unknown>[]): TreeOption[] {
-  return nodes.map(node => ({
-    value: node.id as string,
-    title: node.name as string,
-    icon: node.icon as string | undefined,
-    color: node.color as string | undefined,
-    type: node.type as 'INCOME' | 'EXPENSE' | undefined,
-    children: node.children
-      ? convertToTreeSelectData(node.children as Record<string, unknown>[])
-      : undefined
-  }))
-}
+
 
 export default function UploadPage() {
   const { message } = App.useApp()
@@ -92,43 +80,7 @@ export default function UploadPage() {
   const [analyzingAI, setAnalyzingAI] = useState(false)
   const [aiProgress, setAiProgress] = useState(0)
   const [importResult, setImportResult] = useState<Record<string, unknown> | null>(null)
-  const [categoryTree, setCategoryTree] = useState<TreeOption[]>([])
-  const [tagTree, setTagTree] = useState<TreeOption[]>([])
-
-  const mapTreeDataWithIcon = (nodes: TreeOption[]): any[] => {
-    return nodes.map(node => ({
-      value: node.value,
-      title: (
-        <Space size={4}>
-          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
-          <span>{node.title}</span>
-        </Space>
-      ),
-      searchValue: node.title as string,
-      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
-    }))
-  }
-
-  const filterTreeDataByType = (nodes: TreeOption[], type: 'INCOME' | 'EXPENSE'): TreeOption[] => {
-    return nodes
-      .filter(node => !node.type || node.type === type)
-      .map(node => ({
-        ...node,
-        children: node.children ? filterTreeDataByType(node.children, type) : undefined
-      }))
-  }
-
-  const loadMetadata = useCallback(async () => {
-    const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
-    if (catRes.success)
-      setCategoryTree(convertToTreeSelectData(catRes.data as Record<string, unknown>[]))
-    if (tagRes.success)
-      setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
-    return {
-      categories: catRes.data as Record<string, unknown>[],
-      tags: tagRes.data as Record<string, unknown>[]
-    }
-  }, [])
+  const { categories, tags, tagTree } = useMetadata()
 
   // 递归查找分类（支持按名称匹配）
   const findCategoryByName = (
@@ -171,7 +123,6 @@ export default function UploadPage() {
 
   const handleUpload = async (file: File) => {
     try {
-      const metadata = await loadMetadata()
       const res = await previewUpload(file, source)
       if (res.success) {
         setFileName(res.data.fileName)
@@ -183,15 +134,15 @@ export default function UploadPage() {
 
           // 优先匹配二级分类，如果没有则匹配一级分类
           if (bill.subCategoryName) {
-            categoryId = findCategoryByName(metadata.categories, bill.subCategoryName, bill.type)
+            categoryId = findCategoryByName(categories, bill.subCategoryName, bill.type)
           }
           if (!categoryId && bill.categoryName) {
-            categoryId = findCategoryByName(metadata.categories, bill.categoryName, bill.type)
+            categoryId = findCategoryByName(categories, bill.categoryName, bill.type)
           }
 
           // 匹配标签
           if (bill.tagNames && bill.tagNames.length > 0) {
-            tagIds = findTagsByNames(metadata.tags, bill.tagNames)
+            tagIds = findTagsByNames(tags, bill.tagNames || [])
           }
 
           return {
@@ -200,7 +151,8 @@ export default function UploadPage() {
             originalSubCategoryName: bill.subCategoryName,
             originalTagNames: bill.tagNames,
             categoryId,
-            tagIds: tagIds.length > 0 ? tagIds : undefined
+            tagIds: tagIds.length > 0 ? tagIds : undefined,
+            _tempId: `bill-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
           }
         })
 
@@ -243,70 +195,17 @@ export default function UploadPage() {
     setAnalyzingAI(true)
     setAiProgress(0)
     try {
-      // 只发送需要分析的账单给 AI
       const billsForAI = needAnalysis.map((item, idx) => ({
-        index: idx, // AI 返回时使用的索引
-        originalIndex: item.originalIndex, // 原始索引，用于映射回去
+        index: idx,
+        originalIndex: item.originalIndex,
         remark: item.bill.remark,
         amount: item.bill.amount,
         type: item.bill.type
       }))
 
-      const response = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          bills: billsForAI.map(b => ({
-            remark: b.remark,
-            amount: b.amount,
-            type: b.type
-          }))
-        })
+      const resData = await streamAIAnalyze(billsForAI, (progress) => {
+        setAiProgress(progress)
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || 'AI 分析失败')
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('无法读取响应流')
-      }
-
-      const decoder = new TextDecoder()
-      let accumulatedText = ''
-      let done = false
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read()
-        done = readerDone
-        if (value) {
-          const chunkText = decoder.decode(value, { stream: !done })
-          accumulatedText += chunkText
-
-          // 匹配 JSON 中的 progress 键值，更新进度状态
-          const matches = [...accumulatedText.matchAll(/"progress"\s*:\s*(\d+)/g)]
-          if (matches.length > 0) {
-            const latestProgress = Math.min(Math.max(...matches.map(m => parseInt(m[1], 10))), 100)
-            setAiProgress(latestProgress)
-          }
-        }
-      }
-
-      let cleanContent = accumulatedText.trim()
-      if (cleanContent.startsWith('```json')) {
-        cleanContent = cleanContent.replace(/^```json\s*/, '').replace(/```\s*$/, '')
-      } else if (cleanContent.startsWith('```')) {
-        cleanContent = cleanContent.replace(/^```\s*/, '').replace(/```\s*$/, '')
-      }
-
-      const parsed = JSON.parse(cleanContent)
-      const resData = Array.isArray(parsed)
-        ? parsed
-        : parsed.suggestions || parsed.results || [parsed]
 
       const updated = [...previewBills]
       for (const suggestion of resData as Array<{
@@ -483,15 +382,13 @@ export default function UploadPage() {
               transition: 'all 0.3s'
             }}
           >
-            <TreeSelect
-              allowClear
+            <CategorySelect
               size="small"
               placeholder="选择分类"
               style={{ width: '100%' }}
-              treeData={mapTreeDataWithIcon(filterTreeDataByType(categoryTree, record.type))}
+              type={record.type}
               value={record.categoryId}
               onChange={val => handleBillChange(index, 'categoryId', val)}
-              treeNodeFilterProp="searchValue"
             />
             {record.aiCategoryName && (
               <div
@@ -548,7 +445,7 @@ export default function UploadPage() {
               treeCheckable
               treeCheckStrictly
               showCheckedStrategy={TreeSelect.SHOW_PARENT}
-              value={record.tagIds}
+              value={record.tagIds?.map(id => ({ value: id, label: tagTree.find(t => t.value === id)?.title || id }))}
               onChange={val => handleBillChange(index, 'tagIds', val)}
             />
             {record.aiTagNames && record.aiTagNames.length > 0 && (
@@ -636,7 +533,7 @@ export default function UploadPage() {
           <Table
             columns={previewColumns}
             dataSource={previewBills}
-            rowKey={(_, index) => String(index)}
+            rowKey={(record: any) => record._tempId}
             size="small"
             scroll={{ x: 900, y: 'calc(100vh - 350px)' }}
             pagination={{ pageSize: 50 }}
@@ -657,21 +554,21 @@ export default function UploadPage() {
                 <Statistic
                   title="成功导入"
                   value={importResult.success as number}
-                  valueStyle={{ color: '#52c41a' }}
+                  styles={{ content: { color: '#52c41a' } }}
                 />
               </Col>
               <Col>
                 <Statistic
                   title="重复跳过"
                   value={importResult.duplicates as number}
-                  valueStyle={{ color: '#faad14' }}
+                  styles={{ content: { color: '#faad14' } }}
                 />
               </Col>
               <Col>
                 <Statistic
                   title="失败"
                   value={importResult.failed as number}
-                  valueStyle={{ color: '#ff4d4f' }}
+                  styles={{ content: { color: '#ff4d4f' } }}
                 />
               </Col>
             </Row>

@@ -1,13 +1,17 @@
-/* 全局样式 */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@import 'tailwindcss';
 
-body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+@layer base {
+  /* 全局样式 */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family:
+      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
 }
 
 /* Sidebar Logo & Title Design */
@@ -71,5 +75,3 @@ body {
 .logo-container:hover .logo-subtitle {
   color: #cbd5e1;
 }
-
-

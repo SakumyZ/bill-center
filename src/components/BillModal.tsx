@@ -3,19 +3,17 @@
 import React, { useEffect, useState } from 'react'
 import { Modal, Form, DatePicker, Select, Space, InputNumber, TreeSelect, Input, App } from 'antd'
 import dayjs from 'dayjs'
-import { createBill, fetchCategories, fetchTags, updateBill } from '@/lib/api-client'
-import { Icon } from '@iconify/react'
+import { createBill, updateBill } from '@/lib/api-client'
 import {
   BillModalValues,
   BillType,
-  CategoryOption,
-  TreeOption,
-  convertToCategoryTreeSelectData,
-  convertToTreeSelectData,
   filterCategoriesByType,
   hasCategoryValue,
   normalizeTagIds
 } from '@/lib/bill-form'
+import { useMetadata } from '@/hooks/useMetadata'
+import CurrencyInput from '@/components/CurrencyInput'
+import CategorySelect from '@/components/CategorySelect'
 
 interface BillModalProps {
   open: boolean
@@ -35,31 +33,11 @@ export default function BillModal({
   const { message } = App.useApp()
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
-  const [categoryTree, setCategoryTree] = useState<CategoryOption[]>([])
-  const [tagTree, setTagTree] = useState<TreeOption[]>([])
+  const { categoryTree, tagTree } = useMetadata()
   const currentType = Form.useWatch<BillType>('type', form) ?? 'EXPENSE'
-  const filteredCategoryTree = filterCategoriesByType(categoryTree, currentType)
   const discountLabel = currentType === 'INCOME' ? '手续费/扣除' : '优惠金额'
   const actualAmountLabel = currentType === 'INCOME' ? '到账金额' : '实付金额'
   const categoryPlaceholder = currentType === 'INCOME' ? '请选择收入分类' : '请选择支出分类'
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    async function loadMetadata(): Promise<void> {
-      const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
-      if (catRes.success) {
-        setCategoryTree(convertToCategoryTreeSelectData(catRes.data as Record<string, unknown>[]))
-      }
-      if (tagRes.success) {
-        setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
-      }
-    }
-
-    void loadMetadata()
-  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -146,19 +124,7 @@ export default function BillModal({
     }
   }
 
-  const mapTreeDataWithIcon = (nodes: CategoryOption[]): any[] => {
-    return nodes.map(node => ({
-      value: node.value,
-      title: (
-        <Space size={4}>
-          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
-          <span>{node.title}</span>
-        </Space>
-      ),
-      searchValue: node.title as string,
-      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
-    }))
-  }
+
 
   return (
     <Modal
@@ -189,42 +155,19 @@ export default function BillModal({
             rules={[{ required: true, message: '请输入金额' }]}
             style={{ flex: 1 }}
           >
-            <InputNumber
-              min={0 as number}
-              precision={2}
-              prefix="¥"
-              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
-              style={{ width: '100%' }}
-            />
+            <CurrencyInput style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="discount" label={discountLabel} style={{ flex: 1 }}>
-            <InputNumber
-              min={0 as number}
-              precision={2}
-              prefix="¥"
-              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
-              style={{ width: '100%' }}
-            />
+            <CurrencyInput style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="actualAmount" label={actualAmountLabel} style={{ flex: 1 }}>
-            <InputNumber
-              min={0 as number}
-              precision={2}
-              prefix="¥"
-              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
-              style={{ width: '100%' }}
-            />
+            <CurrencyInput style={{ width: '100%' }} />
           </Form.Item>
         </Space>
         <Form.Item name="categoryId" label="分类">
-          <TreeSelect
-            allowClear
+          <CategorySelect
+            type={currentType}
             placeholder={categoryPlaceholder}
-            treeData={mapTreeDataWithIcon(filteredCategoryTree)}
-            treeNodeFilterProp="searchValue"
           />
         </Form.Item>
         <Form.Item name="tagIds" label="标签">

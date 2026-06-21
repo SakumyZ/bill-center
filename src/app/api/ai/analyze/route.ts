@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { successResponse, errorResponse } from '@/lib/api-response'
+import { errorResponse } from '@/lib/api-response'
 import OpenAI from 'openai'
 
 // POST /api/ai/analyze - AI 分析账单分类和标签

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { successResponse, errorResponse } from '@/lib/api-response'
 
 // GET /api/monthly-summaries/trend - 获取历史总资产走势数据
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const summaries = await prisma.monthlySummary.findMany({
       orderBy: {

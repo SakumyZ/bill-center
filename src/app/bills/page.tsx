@@ -16,16 +16,14 @@ import {
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, CopyOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import CategorySelect from '@/components/CategorySelect'
+import { useMetadata } from '@/hooks/useMetadata'
 import { Icon } from '@iconify/react'
-import { fetchBills, deleteBill, fetchCategories, fetchTags } from '@/lib/api-client'
+import { fetchBills, deleteBill } from '@/lib/api-client'
 import BillModal from '@/components/BillModal'
 import {
   BillModalValues,
   BillType,
-  CategoryOption,
-  TreeOption,
-  convertToCategoryTreeSelectData,
-  convertToTreeSelectData,
   filterCategoriesByType,
   hasCategoryValue
 } from '@/lib/bill-form'
@@ -55,27 +53,11 @@ export default function BillsPage() {
     mode: 'create' | 'edit'
     initialValues?: BillModalValues
   }>({ open: false, mode: 'create' })
-  const [categoryTree, setCategoryTree] = useState<CategoryOption[]>([])
-  const [tagTree, setTagTree] = useState<TreeOption[]>([])
+  const { categoryTree, tagTree } = useMetadata()
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
   const [filterForm] = Form.useForm()
   const currentFilterType = Form.useWatch<BillType | undefined>('type', filterForm)
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
-  const filteredSearchCategoryTree = filterCategoriesByType(categoryTree, currentFilterType)
-
-  const mapTreeDataWithIcon = (nodes: CategoryOption[]): any[] => {
-    return nodes.map(node => ({
-      value: node.value,
-      title: (
-        <Space size={4}>
-          {node.icon && node.icon.includes(':') && <Icon icon={node.icon} style={{ fontSize: 14 }} />}
-          <span>{node.title}</span>
-        </Space>
-      ),
-      searchValue: node.title as string,
-      children: node.children ? mapTreeDataWithIcon(node.children) : undefined
-    }))
-  }
 
   const loadBills = useCallback(async () => {
     setLoading(true)
@@ -98,19 +80,6 @@ export default function BillsPage() {
     }
   }, [filters, message, pagination.page, pagination.pageSize])
 
-  const loadMetadata = useCallback(async () => {
-    const [catRes, tagRes] = await Promise.all([fetchCategories(), fetchTags()])
-    if (catRes.success) {
-      setCategoryTree(convertToCategoryTreeSelectData(catRes.data as Record<string, unknown>[]))
-    }
-    if (tagRes.success) {
-      setTagTree(convertToTreeSelectData(tagRes.data as Record<string, unknown>[]))
-    }
-  }, [])
-
-  useEffect(() => {
-    loadMetadata()
-  }, [loadMetadata])
 
   useEffect(() => {
     loadBills()
@@ -367,12 +336,10 @@ export default function BillsPage() {
             />
           </Form.Item>
           <Form.Item name="categoryId" label="分类">
-            <TreeSelect
-              allowClear
+            <CategorySelect
               placeholder="全部"
               style={{ width: 150 }}
-              treeData={mapTreeDataWithIcon(filteredSearchCategoryTree)}
-              treeNodeFilterProp="searchValue"
+              type={currentFilterType}
             />
           </Form.Item>
           <Form.Item name="tagId" label="标签">

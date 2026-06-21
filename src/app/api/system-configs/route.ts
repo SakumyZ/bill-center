@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { successResponse, errorResponse } from '@/lib/api-response'
 
 // GET /api/system-configs - 获取系统配置
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // 默认配置（来自环境变量）
     const defaults = {

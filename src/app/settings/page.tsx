@@ -154,7 +154,7 @@ export default function SettingsPage() {
         </div>
 
         <Alert
-          message="说明"
+          title="说明"
           description="在此页面可以配置您的 AI 智能分析凭证。若您在 .env 文件中已配置了环境变量，在不修改此处的情况下，系统仍会自动回退并使用环境变量的默认参数。"
           type="info"
           showIcon
