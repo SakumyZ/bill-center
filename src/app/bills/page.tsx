@@ -10,9 +10,10 @@ import {
   TreeSelect,
   Button
 } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { SearchOutlined, PlusOutlined } from '@ant-design/icons'
 import CategorySelect from '@/components/CategorySelect'
 import BillListTable from '@/components/BillListTable'
+import BillModal from '@/components/BillModal'
 import { useMetadata } from '@/hooks/useMetadata'
 import { BillType, filterCategoriesByType, hasCategoryValue } from '@/lib/bill-form'
 
@@ -23,6 +24,8 @@ export default function BillsPage() {
   const [filterForm] = Form.useForm()
   const currentFilterType = Form.useWatch<BillType | undefined>('type', filterForm)
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
 
 
@@ -71,53 +74,69 @@ export default function BillsPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ marginBottom: 16, padding: 16, background: '#fafafa', borderRadius: 8 }}>
-        <Form
-          form={filterForm}
-          layout="inline"
-          style={{ flexWrap: 'wrap', gap: 8 }}
-          onValuesChange={handleFilterValuesChange}
-        >
-          <Form.Item name="dateRange" label="日期">
-            <RangePicker />
-          </Form.Item>
-          <Form.Item name="type" label="类型">
-            <Select
-              allowClear
-              placeholder="全部"
-              style={{ width: 100 }}
-              options={[
-                { label: '支出', value: 'EXPENSE' },
-                { label: '收入', value: 'INCOME' }
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="categoryId" label="分类">
-            <CategorySelect
-              placeholder="全部"
-              style={{ width: 150 }}
-              type={currentFilterType}
-            />
-          </Form.Item>
-          <Form.Item name="tagId" label="标签">
-            <TreeSelect allowClear placeholder="全部" style={{ width: 150 }} treeData={tagTree} />
-          </Form.Item>
-          <Form.Item name="keyword" label="关键词">
-            <Input placeholder="搜索备注" allowClear />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button type="primary" icon={<SearchOutlined />} onClick={handleFilter}>
-                搜索
-              </Button>
-              <Button onClick={handleReset}>重置</Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Form
+            form={filterForm}
+            layout="inline"
+            style={{ flexWrap: 'wrap', gap: 8, flex: 1 }}
+            onValuesChange={handleFilterValuesChange}
+          >
+            <Form.Item name="dateRange" label="日期">
+              <RangePicker />
+            </Form.Item>
+            <Form.Item name="type" label="类型">
+              <Select
+                allowClear
+                placeholder="全部"
+                style={{ width: 100 }}
+                options={[
+                  { label: '支出', value: 'EXPENSE' },
+                  { label: '收入', value: 'INCOME' }
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="categoryId" label="分类">
+              <CategorySelect
+                placeholder="全部"
+                style={{ width: 150 }}
+                type={currentFilterType}
+              />
+            </Form.Item>
+            <Form.Item name="tagId" label="标签">
+              <TreeSelect allowClear placeholder="全部" style={{ width: 150 }} treeData={tagTree} />
+            </Form.Item>
+            <Form.Item name="keyword" label="关键词">
+              <Input placeholder="搜索备注" allowClear />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button type="primary" icon={<SearchOutlined />} onClick={handleFilter}>
+                  搜索
+                </Button>
+                <Button onClick={handleReset}>重置</Button>
+              </Space>
+            </Form.Item>
+          </Form>
+
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+            新增账单
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 bg-white p-4 rounded-lg shadow-sm border border-slate-100">
-        <BillListTable filters={filters} />
+      <div className="flex-1 min-h-0 bg-white p-4 rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+        <BillListTable filters={filters} refreshKey={refreshKey} />
       </div>
+
+      <BillModal
+        open={createModalOpen}
+        mode="create"
+        onCancel={() => setCreateModalOpen(false)}
+        onSuccess={() => {
+          setCreateModalOpen(false)
+          setRefreshKey(k => k + 1)
+        }}
+      />
     </div>
   )
 }

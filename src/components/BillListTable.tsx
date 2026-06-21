@@ -32,9 +32,10 @@ interface BillRecord {
 interface BillListTableProps {
   filters?: Record<string, string | undefined>
   hideToolbar?: boolean
+  refreshKey?: number
 }
 
-export default function BillListTable({ filters = {}, hideToolbar = false }: BillListTableProps) {
+export default function BillListTable({ filters = {}, hideToolbar = false, refreshKey = 0 }: BillListTableProps) {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [bills, setBills] = useState<BillRecord[]>([])
@@ -75,11 +76,8 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
 
   useEffect(() => {
     loadBills()
-  }, [loadBills])
+  }, [loadBills, refreshKey])
 
-  const handleAdd = () => {
-    setBillModalState({ open: true, mode: 'create' })
-  }
 
   const handleEdit = (record: BillRecord) => {
     setBillModalState({
@@ -94,7 +92,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
         actualAmount: Number(record.actualAmount),
         remark: record.remark,
         categoryId: record.category?.id,
-        tagIds: record.tags.map(tag => tag.id)
+        tagIds: record.tags.map(tag => ({ value: tag.id, label: tag.name })) as any
       }
     })
   }
@@ -111,7 +109,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
         actualAmount: Number(record.actualAmount),
         remark: record.remark,
         categoryId: record.category?.id,
-        tagIds: record.tags.map(tag => tag.id)
+        tagIds: record.tags.map(tag => ({ value: tag.id, label: tag.name })) as any
       }
     })
   }
@@ -172,9 +170,9 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
       title: '类型',
       dataIndex: 'type',
       key: 'type',
-      width: 80,
+      width: 60,
       render: (type: string) => (
-        <Tag color={type === 'INCOME' ? 'green' : 'red'}>{type === 'INCOME' ? '收入' : '支出'}</Tag>
+        <Tag color={type === 'INCOME' ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>{type === 'INCOME' ? '入' : '出'}</Tag>
       )
     },
     {
@@ -189,7 +187,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
       title: '优惠',
       dataIndex: 'discount',
       key: 'discount',
-      width: 80,
+      width: 70,
       render: (discount: number) => (discount > 0 ? `¥${Number(discount).toFixed(2)}` : '-')
     },
     {
@@ -197,13 +195,13 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
       dataIndex: 'actualAmount',
       key: 'actualAmount',
       width: 100,
-      render: (amount: number) => `¥${Number(amount).toFixed(2)}`
+      render: (amount: number) => <span style={{ fontWeight: 500 }}>¥{Number(amount).toFixed(2)}</span>
     },
     {
       title: '分类',
       dataIndex: 'category',
       key: 'category',
-      width: 100,
+      width: 120,
       render: (category: BillRecord['category']) =>
         category ? (
           <Tag color={category.color || undefined}>
@@ -220,7 +218,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
       title: '标签',
       dataIndex: 'tags',
       key: 'tags',
-      width: 200,
+      width: 150,
       render: (tags: BillRecord['tags']) =>
         tags.map(tag => (
           <Tag key={tag.id} color={tag.color || undefined}>
@@ -237,7 +235,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 150,
       render: (_: unknown, record: BillRecord) => (
         <Space>
           <Button
@@ -264,27 +262,20 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {!hideToolbar && (
+      {!hideToolbar && selectedRowKeys.length > 0 && (
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
           <Space>
-            {selectedRowKeys.length > 0 && (
-              <>
-                <span>已选择 {selectedRowKeys.length} 项</span>
-                <Popconfirm
-                  title="确认删除"
-                  description={`确定要删除选中的 ${selectedRowKeys.length} 条账单吗？`}
-                  onConfirm={handleBatchDelete}
-                >
-                  <Button danger icon={<DeleteOutlined />}>
-                    批量删除
-                  </Button>
-                </Popconfirm>
-              </>
-            )}
+            <span>已选择 {selectedRowKeys.length} 项</span>
+            <Popconfirm
+              title="确认删除"
+              description={`确定要删除选中的 ${selectedRowKeys.length} 条账单吗？`}
+              onConfirm={handleBatchDelete}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                批量删除
+              </Button>
+            </Popconfirm>
           </Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            新增账单
-          </Button>
         </div>
       )}
 
@@ -310,7 +301,7 @@ export default function BillListTable({ filters = {}, hideToolbar = false }: Bil
             setSelectedRowKeys([])
           }
         }}
-        scroll={{ x: 1000, y: hideToolbar ? 'calc(100vh - 180px)' : 'calc(100vh - 400px)' }}
+        scroll={{ x: 1000, y: hideToolbar ? 'calc(100vh - 180px)' : 'calc(100vh - 380px)' }}
       />
 
       <BillModal

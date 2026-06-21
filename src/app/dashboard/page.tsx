@@ -35,14 +35,13 @@ export default function DashboardPage() {
   const [detailFilters, setDetailFilters] = useState<Record<string, string | undefined>>({})
   const [detailTitle, setDetailTitle] = useState('账单明细')
 
-  const handleOpenDetail = (catId: string, catName: string) => {
+  const handleOpenDetail = (filters: Record<string, string>, title: string) => {
     setDetailFilters({
-      categoryId: catId,
+      ...filters,
       startDate: dateRange[0].format('YYYY-MM-DD'),
-      endDate: dateRange[1].format('YYYY-MM-DD'),
-      type: 'EXPENSE'
+      endDate: dateRange[1].format('YYYY-MM-DD')
     })
-    setDetailTitle(`${catName} - 账单明细`)
+    setDetailTitle(title)
     setDetailDrawerOpen(true)
   }
 
@@ -215,8 +214,8 @@ export default function DashboardPage() {
 
       <Drawer
         title={detailTitle}
-        placement="right"
-        size="large"
+        placement="bottom"
+        height="70vh"
         onClose={() => setDetailDrawerOpen(false)}
         open={detailDrawerOpen}
         styles={{ body: { padding: 0 } }}

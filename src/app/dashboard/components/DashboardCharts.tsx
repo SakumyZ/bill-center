@@ -22,7 +22,7 @@ export default function DashboardCharts({
   assetsTrend: any[]
   tagCloud: any[]
   topBillsSlot: React.ReactNode
-  onOpenDetail?: (categoryId: string, categoryName: string) => void
+  onOpenDetail?: (filters: Record<string, string>, title: string) => void
 }) {
   const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
@@ -127,10 +127,11 @@ export default function DashboardCharts({
 
   const wordCloudOption = React.useMemo(() => ({
     title: { text: '标签词云', left: 'center' },
+    tooltip: { show: true, formatter: (params: any) => `${params.name}: ${params.value}笔<br/><span style="font-size:12px;color:#999;">💡 点击查看相关账单</span>` },
     series: [{
       type: 'wordCloud', shape: 'circle', gridSize: 8, sizeRange: [14, 60], rotationRange: [-45, 45],
       textStyle: { fontFamily: 'sans-serif', fontWeight: 'bold', color: () => `hsl(${Math.random() * 360}, 70%, 50%)` },
-      data: tagCloud.map(t => ({ name: t.name, value: t.count }))
+      data: tagCloud.map(t => ({ name: t.name, value: t.count, tagId: t.tagId }))
     }]
   }), [tagCloud])
 
@@ -163,7 +164,7 @@ export default function DashboardCharts({
 
                     // Ctrl / Meta 键点击，强制打开明细
                     if (params.event?.event?.ctrlKey || params.event?.event?.metaKey) {
-                      onOpenDetail?.(cid, cname)
+                      onOpenDetail?.({ categoryId: cid, type: 'EXPENSE' }, `${cname} - 账单明细`)
                       return
                     }
 
@@ -206,7 +207,22 @@ export default function DashboardCharts({
           <Card className="h-full">
             {tagCloud.length > 0 ? (
               // 标签词云
-              <ReactEChartsCore option={wordCloudOption} style={{ height: 350 }} notMerge />
+              <ReactEChartsCore
+                option={wordCloudOption}
+                style={{ height: 350 }}
+                notMerge
+                onEvents={{
+                  click: (params: any) => {
+                    if (params.seriesType === 'wordCloud') {
+                      const tid = params.data?.tagId
+                      const tname = params.data?.name
+                      if (tid) {
+                        onOpenDetail?.({ tagId: tid }, `标签 [${tname}] 的账单`)
+                      }
+                    }
+                  }
+                }}
+              />
             ) : <div className="h-[350px] flex items-center justify-center text-gray-400">暂无标签数据</div>}
           </Card>
         </Col>
