@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Space, Radio, DatePicker, Button, Select, Spin, App } from 'antd'
+import { Space, Radio, DatePicker, Button, Select, Spin, App, Drawer } from 'antd'
 import dayjs from 'dayjs'
 import useSWR from 'swr'
 import { fetchStatistics, fetchMonthlySummary, updateMonthlySummary } from '@/lib/api'
@@ -22,6 +22,7 @@ import OverviewCards from './components/OverviewCards'
 import DashboardCharts from './components/DashboardCharts'
 import MonthlySummaryCard from './components/MonthlySummaryCard'
 import TopBillsTable from './components/TopBillsTable'
+import BillListTable from '@/components/BillListTable'
 
 export default function DashboardPage() {
   const { message } = App.useApp()
@@ -29,6 +30,21 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(getDefaultDateRange('month'))
   const [categoryId, setCategoryId] = useState<string | undefined>()
   const [tagId, setTagId] = useState<string | undefined>()
+
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
+  const [detailFilters, setDetailFilters] = useState<Record<string, string | undefined>>({})
+  const [detailTitle, setDetailTitle] = useState('账单明细')
+
+  const handleOpenDetail = (catId: string, catName: string) => {
+    setDetailFilters({
+      categoryId: catId,
+      startDate: dateRange[0].format('YYYY-MM-DD'),
+      endDate: dateRange[1].format('YYYY-MM-DD'),
+      type: 'EXPENSE'
+    })
+    setDetailTitle(`${catName} - 账单明细`)
+    setDetailDrawerOpen(true)
+  }
 
   const { flatCategories, flatTags, isLoading: metaLoading } = useFlatMetadata()
 
@@ -185,6 +201,7 @@ export default function DashboardPage() {
                   assetsTrend={data.assetsTrend || []}
                   tagCloud={data.tagCloud || []}
                   topBillsSlot={<TopBillsTable topBills={data.topBills || []} reload={reloadStats} />}
+                  onOpenDetail={handleOpenDetail}
                 />
               </>
             ) : (
@@ -195,6 +212,21 @@ export default function DashboardPage() {
           </Spin>
         )}
       </div>
+
+      <Drawer
+        title={detailTitle}
+        placement="right"
+        width={800}
+        onClose={() => setDetailDrawerOpen(false)}
+        open={detailDrawerOpen}
+        styles={{ body: { padding: 0 } }}
+      >
+        <div className="h-full bg-slate-50 p-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-100 h-full">
+            <BillListTable filters={detailFilters} hideToolbar={true} />
+          </div>
+        </div>
+      </Drawer>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Card, Row, Col, App } from 'antd'
+import { Card, Row, Col } from 'antd'
 import dynamic from 'next/dynamic'
 
 const ReactEChartsCore = dynamic(
@@ -13,7 +13,8 @@ export default function DashboardCharts({
   trend,
   assetsTrend,
   tagCloud,
-  topBillsSlot
+  topBillsSlot,
+  onOpenDetail
 }: {
   categoryData: any[]
   flatCategories: any[]
@@ -21,8 +22,8 @@ export default function DashboardCharts({
   assetsTrend: any[]
   tagCloud: any[]
   topBillsSlot: React.ReactNode
+  onOpenDetail?: (categoryId: string, categoryName: string) => void
 }) {
-  const { message } = App.useApp()
   const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
   const getFilteredCategoryData = () => {
@@ -63,7 +64,14 @@ export default function DashboardCharts({
       subtextStyle: { color: '#999', fontSize: 12 },
       triggerEvent: true
     },
-    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    tooltip: { 
+      trigger: 'item', 
+      formatter: (params: any) => {
+        const base = `${params.name}: ¥${params.value} (${params.percent}%)`
+        const tip = `<br/><span style="font-size:12px;color:#999;">💡 按住 Ctrl 点击查看所有明细账单</span>`
+        return base + tip
+      } 
+    },
     series: [{
       type: 'pie',
       radius: ['35%', '60%'],
@@ -135,19 +143,30 @@ export default function DashboardCharts({
                     return
                   }
                   
-                  // 如果点击的是饼图扇区，且处于一级分类状态，则进入下钻
+                  // 如果点击的是饼图扇区
                   if (params.componentType === 'series') {
-                    if (drillDownParentId === null) {
-                      const cid = params.data?.categoryId
-                      if (cid) {
-                        if (flatCategories.some(c => c.parentId === cid)) {
-                          setDrillDownParentId(cid)
-                        } else {
-                          message.info('该分类没有子分类')
-                        }
-                      }
+                    const cid = params.data?.categoryId
+                    const cname = params.data?.name
+
+                    if (!cid) return
+
+                    // Ctrl / Meta 键点击，强制打开明细
+                    if (params.event?.event?.ctrlKey || params.event?.event?.metaKey) {
+                      onOpenDetail?.(cid, cname)
+                      return
                     }
-                    // 如果已经处于下钻状态，点击扇区不再返回上级
+
+                    if (drillDownParentId === null) {
+                      // 一级分类
+                      if (flatCategories.some(c => c.parentId === cid)) {
+                        setDrillDownParentId(cid) // 有子分类，下钻
+                      } else {
+                        onOpenDetail?.(cid, cname) // 无子分类，直接打开明细
+                      }
+                    } else {
+                      // 已经在看子分类，再点击扇区就直接打开明细
+                      onOpenDetail?.(cid, cname)
+                    }
                   }
                 }
               }}
