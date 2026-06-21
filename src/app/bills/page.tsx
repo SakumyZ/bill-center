@@ -1,21 +1,25 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import {
   Form,
   Input,
   Select,
   DatePicker,
   Space,
-  TreeSelect
+  TreeSelect,
+  Button
 } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import CategorySelect from '@/components/CategorySelect'
 import BillListTable from '@/components/BillListTable'
+import { useMetadata } from '@/hooks/useMetadata'
+import { BillType, filterCategoriesByType, hasCategoryValue } from '@/lib/bill-form'
 
 const { RangePicker } = DatePicker
 
 export default function BillsPage() {
+  const { categoryTree, tagTree } = useMetadata()
   const [filterForm] = Form.useForm()
   const currentFilterType = Form.useWatch<BillType | undefined>('type', filterForm)
   const [filters, setFilters] = useState<Record<string, string | undefined>>({})

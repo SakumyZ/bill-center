@@ -216,7 +216,7 @@ export default function DashboardPage() {
       <Drawer
         title={detailTitle}
         placement="right"
-        width={800}
+        size="large"
         onClose={() => setDetailDrawerOpen(false)}
         open={detailDrawerOpen}
         styles={{ body: { padding: 0 } }}

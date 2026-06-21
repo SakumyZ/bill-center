@@ -26,7 +26,7 @@ export default function DashboardCharts({
 }) {
   const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
-  const getFilteredCategoryData = () => {
+  const getFilteredCategoryData = React.useCallback(() => {
     const expenseCategories = categoryData.filter(d => d.category?.type === 'EXPENSE')
     if (drillDownParentId === null) {
       const topLevelIds = flatCategories.filter(c => !c.parentId).map(c => c.id)
@@ -50,13 +50,24 @@ export default function DashboardCharts({
         categoryId: item.id, value: item.total, name: item.name, itemStyle: item.color ? { color: item.color } : undefined
       }))
     } else {
-      return expenseCategories.filter(d => d.category?.parentId === drillDownParentId).map(d => ({
-        categoryId: d.categoryId, value: d.totalAmount, name: d.category?.name || '未分类', itemStyle: d.category?.color ? { color: d.category.color } : undefined
+      const parentSelfSpending = expenseCategories.find(d => d.category?.id === drillDownParentId)
+      const subSpending = expenseCategories.filter(d => d.category?.parentId === drillDownParentId).map(d => ({
+        categoryId: d.categoryId, value: d.totalAmount, name: d.category?.name || '未细分', itemStyle: d.category?.color ? { color: d.category.color } : undefined
       }))
-    }
-  }
 
-  const categoryPieOption = {
+      if (parentSelfSpending) {
+        subSpending.push({
+          categoryId: parentSelfSpending.categoryId,
+          value: parentSelfSpending.totalAmount,
+          name: '其他 (未细分)',
+          itemStyle: parentSelfSpending.category?.color ? { color: parentSelfSpending.category.color } : undefined
+        })
+      }
+      return subSpending
+    }
+  }, [categoryData, drillDownParentId, flatCategories])
+
+  const categoryPieOption = React.useMemo(() => ({
     title: {
       text: drillDownParentId ? `${flatCategories.find(c => c.id === drillDownParentId)?.name} - 子分类占比` : '支出分类占比',
       left: 'center',
@@ -81,10 +92,10 @@ export default function DashboardCharts({
       label: { show: true, formatter: '{b}\n{d}%' },
       data: getFilteredCategoryData()
     }]
-  }
+  }), [drillDownParentId, flatCategories, getFilteredCategoryData])
 
   const periods = [...new Set(trend.map(t => t.period))].sort()
-  const trendLineOption = {
+  const trendLineOption = React.useMemo(() => ({
     title: { text: '收支趋势', left: 'center' },
     tooltip: {
       trigger: 'axis',
@@ -97,9 +108,9 @@ export default function DashboardCharts({
       { name: '收入', type: 'line', data: periods.map(p => trend.find(t => t.period === p && t.type === 'INCOME')?.total || 0), smooth: true, itemStyle: { color: '#52c41a' }, areaStyle: { color: 'rgba(82, 196, 26, 0.1)' } },
       { name: '支出', type: 'line', data: periods.map(p => trend.find(t => t.period === p && t.type === 'EXPENSE')?.total || 0), smooth: true, itemStyle: { color: '#ff4d4f' }, areaStyle: { color: 'rgba(255, 77, 79, 0.1)' } }
     ]
-  }
+  }), [trend, periods])
 
-  const assetsTrendLineOption = {
+  const assetsTrendLineOption = React.useMemo(() => ({
     title: { text: '历史总资产走势', left: 'center' },
     tooltip: {
       trigger: 'axis',
@@ -112,16 +123,16 @@ export default function DashboardCharts({
       name: '总资产', type: 'line', data: assetsTrend.map(t => t.assets), smooth: true, itemStyle: { color: '#1677ff' },
       areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(22, 119, 255, 0.2)' }, { offset: 1, color: 'rgba(22, 119, 255, 0)' }] } }
     }]
-  }
+  }), [assetsTrend])
 
-  const wordCloudOption = {
+  const wordCloudOption = React.useMemo(() => ({
     title: { text: '标签词云', left: 'center' },
     series: [{
       type: 'wordCloud', shape: 'circle', gridSize: 8, sizeRange: [14, 60], rotationRange: [-45, 45],
       textStyle: { fontFamily: 'sans-serif', fontWeight: 'bold', color: () => `hsl(${Math.random() * 360}, 70%, 50%)` },
       data: tagCloud.map(t => ({ name: t.name, value: t.count }))
     }]
-  }
+  }), [tagCloud])
 
   return (
     <>
@@ -161,11 +172,10 @@ export default function DashboardCharts({
                       if (flatCategories.some(c => c.parentId === cid)) {
                         setDrillDownParentId(cid) // 有子分类，下钻
                       } else {
-                        onOpenDetail?.(cid, cname) // 无子分类，直接打开明细
+                        // 无子分类，提示必须按 Ctrl
                       }
                     } else {
-                      // 已经在看子分类，再点击扇区就直接打开明细
-                      onOpenDetail?.(cid, cname)
+                      // 已经在看子分类，提示必须按 Ctrl
                     }
                   }
                 }
