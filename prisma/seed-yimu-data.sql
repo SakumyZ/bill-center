@@ -17,18 +17,13 @@ VALUES
 
 INSERT INTO categories (id, name, "parentId", type, sort, color, icon, "createdAt", "updatedAt")
 VALUES
+  ('c6544be1-b762-4b3e-9c0a-6423e699088a', '早餐', 'cat-food-001', 'EXPENSE', 0, NULL, NULL, NOW(), NOW()),
   ('cat-food-001-001', '小吃', 'cat-food-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-002', '牛奶', 'cat-food-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW()),
   ('cat-food-001-003', '午餐', 'cat-food-001', 'EXPENSE', 3, NULL, NULL, NOW(), NOW()),
   ('cat-food-001-004', '晚餐', 'cat-food-001', 'EXPENSE', 4, NULL, NULL, NOW(), NOW()),
   ('cat-food-001-005', '饮料/酒水', 'cat-food-001', 'EXPENSE', 5, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-006', '小龙虾', 'cat-food-001', 'EXPENSE', 6, NULL, NULL, NOW(), NOW()),
   ('cat-food-001-007', '生鲜肉品', 'cat-food-001', 'EXPENSE', 7, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-008', '面条', 'cat-food-001', 'EXPENSE', 8, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-009', '水果', 'cat-food-001', 'EXPENSE', 9, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-010', '馄饨', 'cat-food-001', 'EXPENSE', 10, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-011', '新鲜蔬菜', 'cat-food-001', 'EXPENSE', 11, NULL, NULL, NOW(), NOW()),
-  ('cat-food-001-012', '主食', 'cat-food-001', 'EXPENSE', 12, NULL, NULL, NOW(), NOW());
+  ('cat-food-001-009', '水果', 'cat-food-001', 'EXPENSE', 9, NULL, NULL, NOW(), NOW());
 
 -- 2. 购物消费
 INSERT INTO categories (id, name, type, sort, color, icon, "createdAt", "updatedAt")
@@ -37,24 +32,28 @@ VALUES
 
 INSERT INTO categories (id, name, "parentId", type, sort, color, icon, "createdAt", "updatedAt")
 VALUES
+  ('cdc2edb7-cb14-42ff-a8f8-65f8f700cd9c', '数码科技', 'cat-shop-001', 'EXPENSE', 0, NULL, NULL, NOW(), NOW()),
   ('cat-shop-001-001', '日用百货', 'cat-shop-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
   ('cat-shop-001-002', '美妆护肤', 'cat-shop-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW()),
   ('cat-shop-001-003', '衣服鞋帽', 'cat-shop-001', 'EXPENSE', 3, NULL, NULL, NOW(), NOW()),
   ('cat-shop-001-004', '箱包配饰', 'cat-shop-001', 'EXPENSE', 4, NULL, NULL, NOW(), NOW()),
   ('cat-shop-001-005', '饰品首饰', 'cat-shop-001', 'EXPENSE', 5, NULL, NULL, NOW(), NOW());
 
--- 3. 房屋生活
+-- 3. 居家生活
 INSERT INTO categories (id, name, type, sort, color, icon, "createdAt", "updatedAt")
 VALUES
-  ('cat-home-001', '房屋生活', 'EXPENSE', 3, '#26A69A', 'Home', NOW(), NOW());
+  ('cat-home-001', '居家生活', 'EXPENSE', 3, '#26A69A', 'Home', NOW(), NOW());
 
 INSERT INTO categories (id, name, "parentId", type, sort, color, icon, "createdAt", "updatedAt")
 VALUES
-  ('cat-home-001-001', '房租', 'cat-home-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
-  ('cat-home-001-002', '水电气', 'cat-home-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW()),
+  ('2f3100af-5af7-4ade-b29b-e4e3546135c8', '话费宽带', 'cat-home-001', 'EXPENSE', 0, NULL, NULL, NOW(), NOW()),
+  ('ff1391c2-28b3-4316-ab3f-927a4e979ccd', '物业费', 'cat-home-001', 'EXPENSE', 0, NULL, NULL, NOW(), NOW()),
+  ('8e6e2b97-a229-4e83-929a-dd94b9b4499f', '理发', 'cat-home-001', 'EXPENSE', 0, NULL, NULL, NOW(), NOW()),
+  ('cat-home-001-001', '房租/还贷', 'cat-home-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
+  ('cat-home-001-002', '水电燃', 'cat-home-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW()),
   ('cat-home-001-003', '家具家电', 'cat-home-001', 'EXPENSE', 3, NULL, NULL, NOW(), NOW()),
   ('cat-home-001-004', '居家用品', 'cat-home-001', 'EXPENSE', 4, NULL, NULL, NOW(), NOW()),
-  ('cat-home-001-005', '维修保养', 'cat-home-001', 'EXPENSE', 5, NULL, NULL, NOW(), NOW());
+  ('cat-home-001-005', '家政清洁', 'cat-home-001', 'EXPENSE', 5, NULL, NULL, NOW(), NOW());
 
 -- 4. 出行交通
 INSERT INTO categories (id, name, type, sort, color, icon, "createdAt", "updatedAt")
@@ -117,7 +116,7 @@ VALUES
   ('cat-health-001-001', '医疗挂号', 'cat-health-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
   ('cat-health-001-002', '主治项目', 'cat-health-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW()),
   ('cat-health-001-003', '医疗用品', 'cat-health-001', 'EXPENSE', 3, NULL, NULL, NOW(), NOW()),
-  ('cat-health-001-004', '药品', 'cat-health-001', 'EXPENSE', 4, NULL, NULL, NOW(), NOW());
+  ('cat-health-001-004', '买药', 'cat-health-001', 'EXPENSE', 4, NULL, NULL, NOW(), NOW());
 
 -- 9. 其他
 INSERT INTO categories (id, name, type, sort, color, icon, "createdAt", "updatedAt")
@@ -128,6 +127,7 @@ INSERT INTO categories (id, name, "parentId", type, sort, color, icon, "createdA
 VALUES
   ('cat-other-001-001', '烟酒茶', 'cat-other-001', 'EXPENSE', 1, NULL, NULL, NOW(), NOW()),
   ('cat-other-001-002', '其他消费', 'cat-other-001', 'EXPENSE', 2, NULL, NULL, NOW(), NOW());
+
 
 
 -- 10. 收入分类

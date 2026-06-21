@@ -189,13 +189,34 @@ export default function BillModal({
             rules={[{ required: true, message: '请输入金额' }]}
             style={{ flex: 1 }}
           >
-            <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
+            <InputNumber
+              min={0 as number}
+              precision={2}
+              prefix="¥"
+              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
+              style={{ width: '100%' }}
+            />
           </Form.Item>
           <Form.Item name="discount" label={discountLabel} style={{ flex: 1 }}>
-            <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
+            <InputNumber
+              min={0 as number}
+              precision={2}
+              prefix="¥"
+              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
+              style={{ width: '100%' }}
+            />
           </Form.Item>
           <Form.Item name="actualAmount" label={actualAmountLabel} style={{ flex: 1 }}>
-            <InputNumber min={0} precision={2} prefix="¥" style={{ width: '100%' }} />
+            <InputNumber
+              min={0 as number}
+              precision={2}
+              prefix="¥"
+              formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
+              style={{ width: '100%' }}
+            />
           </Form.Item>
         </Space>
         <Form.Item name="categoryId" label="分类">

@@ -135,3 +135,14 @@ model SystemConfig {
   @@map("system_configs")
 }
 
+// ============ 月度总结表 ============
+model MonthlySummary {
+  month     String   @id @db.VarChar(7) // 格式为 'YYYY-MM'
+  content   String   @db.Text
+  assets    Decimal  @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("monthly_summaries")
+}
+

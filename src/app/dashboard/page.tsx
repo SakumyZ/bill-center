@@ -15,7 +15,9 @@ import {
   Tag,
   TreeSelect,
   App,
-  Button
+  Button,
+  Input,
+  InputNumber
 } from 'antd'
 import {
   ArrowUpOutlined,
@@ -26,7 +28,7 @@ import {
 } from '@ant-design/icons'
 import dynamic from 'next/dynamic'
 import dayjs from 'dayjs'
-import { fetchStatistics, fetchCategories, fetchTags } from '@/lib/api-client'
+import { fetchStatistics, fetchCategories, fetchTags, fetchMonthlySummary, updateMonthlySummary, fetchAssetsTrend } from '@/lib/api-client'
 import BillModal from '@/components/BillModal'
 import {
   BillModalValues,
@@ -215,6 +217,15 @@ export default function DashboardPage() {
   const [flatCategories, setFlatCategories] = useState<Array<Record<string, unknown>>>([])
   const [drillDownParentId, setDrillDownParentId] = useState<string | null>(null)
 
+  // 月度总结与资产走势相关状态
+  const [monthlySummary, setMonthlySummary] = useState<{ content: string; assets: number | null }>({
+    content: '',
+    assets: null
+  })
+  const [savingSummary, setSavingSummary] = useState(false)
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [assetsTrend, setAssetsTrend] = useState<Array<{ month: string; assets: number }>>([])
+
   const loadMetadata = useCallback<() => Promise<void>>(async () => {
     const [catRes, tagRes, flatCatRes] = await Promise.all([
       fetchCategories(),
@@ -255,13 +266,66 @@ export default function DashboardPage() {
     }
   }, [dimension, dateRange, categoryId, tagId, message])
 
+  const loadMonthlySummary = useCallback(async (month: string) => {
+    setLoadingSummary(true)
+    try {
+      const res = await fetchMonthlySummary(month)
+      if (res.success && res.data) {
+        setMonthlySummary({
+          content: res.data.content,
+          assets: res.data.assets
+        })
+      }
+    } catch {
+      // 静默失败
+    } finally {
+      setLoadingSummary(false)
+    }
+  }, [])
+
+  const loadAssetsTrend = useCallback(async () => {
+    try {
+      const res = await fetchAssetsTrend()
+      if (res.success && res.data) {
+        setAssetsTrend(res.data)
+      }
+    } catch {
+      // 静默失败
+    }
+  }, [])
+
+  const handleSaveSummary = async () => {
+    const currentMonth = dateRange[0].format('YYYY-MM')
+    setSavingSummary(true)
+    try {
+      const res = await updateMonthlySummary(currentMonth, {
+        content: monthlySummary.content,
+        assets: monthlySummary.assets || 0
+      })
+      if (res.success) {
+        message.success('月度总结保存成功')
+        await loadAssetsTrend()
+      } else {
+        message.error(res.error || '保存总结失败')
+      }
+    } catch {
+      message.error('保存总结失败，请检查服务')
+    } finally {
+      setSavingSummary(false)
+    }
+  }
+
   useEffect(() => {
     loadMetadata()
   }, [loadMetadata])
 
   useEffect(() => {
     loadStatistics()
-  }, [loadStatistics])
+    loadAssetsTrend()
+    if (dimension === 'month') {
+      loadMonthlySummary(dateRange[0].format('YYYY-MM'))
+    }
+  }, [loadStatistics, dimension, dateRange, loadMonthlySummary, loadAssetsTrend])
 
   const handleEditBill = (bill: BillItem): void => {
     setEditingBill({
@@ -428,6 +492,44 @@ export default function DashboardPage() {
         smooth: true,
         itemStyle: { color: '#ff4d4f' },
         areaStyle: { color: 'rgba(255, 77, 79, 0.1)' }
+      }
+    ]
+  }
+
+  // 资产趋势折线图配置
+  const trendMonths = assetsTrend.map(t => t.month)
+  const assetsData = assetsTrend.map(t => t.assets)
+  const assetsTrendLineOption = {
+    title: { text: '历史总资产走势', left: 'center' },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: Array<{ name: string; value: number; marker: string }>) => {
+        return params.map(p => `${p.marker} 总资产: ¥${p.value.toFixed(2)}`).join('<br/>')
+      }
+    },
+    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: trendMonths },
+    yAxis: { type: 'value', axisLabel: { formatter: '¥{value}' } },
+    series: [
+      {
+        name: '总资产',
+        type: 'line',
+        data: assetsData,
+        smooth: true,
+        itemStyle: { color: '#1677ff' },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(22, 119, 255, 0.2)' },
+              { offset: 1, color: 'rgba(22, 119, 255, 0)' }
+            ]
+          }
+        }
       }
     ]
   }
@@ -656,6 +758,76 @@ export default function DashboardPage() {
             </Row>
           )}
 
+          {/* 月度总结与资产录入卡片 */}
+          {dimension === 'month' && (
+            <Card
+              title={
+                <Space>
+                  <EditOutlined style={{ color: '#1677ff' }} />
+                  <span>{dateRange[0].format('YYYY-MM')} 月度总结与资产对账</span>
+                </Space>
+              }
+              style={{
+                marginBottom: 24,
+                borderRadius: 12,
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+                border: '1px solid #f1f5f9'
+              }}
+              extra={
+                <Button
+                  type="primary"
+                  loading={savingSummary}
+                  onClick={handleSaveSummary}
+                  style={{
+                    borderRadius: 8,
+                    background: 'linear-gradient(135deg, #1677ff 0%, #0050b3 100%)',
+                    border: 'none',
+                    boxShadow: '0 4px 12px rgba(22, 119, 255, 0.25)'
+                  }}
+                >
+                  保存月度记录
+                </Button>
+              }
+            >
+              <Spin spinning={loadingSummary}>
+                <Row gutter={24} align="top">
+                  <Col xs={24} md={6} style={{ marginBottom: 16 }}>
+                    <div style={{ marginBottom: 8, fontWeight: 550, color: '#475569', fontSize: 13 }}>
+                      期末总资产 (独立核对)
+                    </div>
+                    <InputNumber
+                      placeholder="期末总资产"
+                      value={monthlySummary.assets ?? undefined}
+                      onChange={val => setMonthlySummary(prev => ({ ...prev, assets: val }))}
+                      precision={2}
+                      prefix="¥"
+                      formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      parser={value => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 0}
+                      style={{ width: '100%', borderRadius: 8 }}
+                      size="large"
+                    />
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#94a3b8', lineHeight: '1.5' }}>
+                      手动统计该月份结束时的真实总资产，可用于补齐未记账流水以呈现完整的资产走势。
+                    </div>
+                  </Col>
+                  <Col xs={24} md={18}>
+                    <div style={{ marginBottom: 8, fontWeight: 550, color: '#475569', fontSize: 13 }}>
+                      月度总结 (如大额消费原因、生活总结)
+                    </div>
+                    <Input.TextArea
+                      placeholder="在这里输入本月的消费感受、超支原因或生活记账总结..."
+                      value={monthlySummary.content}
+                      onChange={e => setMonthlySummary(prev => ({ ...prev, content: e.target.value }))}
+                      rows={3}
+                      size="large"
+                      style={{ borderRadius: 8 }}
+                    />
+                  </Col>
+                </Row>
+              </Spin>
+            </Card>
+          )}
+
           {/* 图表 */}
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col xs={24} lg={12}>
@@ -694,6 +866,17 @@ export default function DashboardPage() {
               </Card>
             </Col>
           </Row>
+
+          {/* 资产走势大图表 */}
+          {assetsTrend.length > 0 && (
+            <Row gutter={16} style={{ marginBottom: 24 }}>
+              <Col span={24}>
+                <Card style={{ borderRadius: 12, border: '1px solid #f1f5f9' }}>
+                  <ReactEChartsCore option={assetsTrendLineOption} style={{ height: 320 }} notMerge />
+                </Card>
+              </Col>
+            </Row>
+          )}
 
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col xs={24} lg={12}>
