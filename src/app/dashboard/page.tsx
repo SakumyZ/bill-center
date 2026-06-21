@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(getDefaultDateRange('month'))
   const [categoryId, setCategoryId] = useState<string | undefined>()
   const [tagId, setTagId] = useState<string | undefined>()
-  
+
   const { flatCategories, flatTags, isLoading: metaLoading } = useFlatMetadata()
 
   const currentPreset = resolveMatchedPreset(dimension, dateRange)
@@ -88,6 +88,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col" style={{ height: '100%', overflow: 'hidden' }}>
+      {/* 检索区域 */}
       <div className="mb-6 flex justify-between items-center pb-2 pt-2">
         <Space size="large" className="flex-wrap gap-y-4">
           <Radio.Group
@@ -161,8 +162,10 @@ export default function DashboardPage() {
           <Spin spinning={statsLoading}>
             {data ? (
               <>
+                {/* 总体概览 */}
                 <OverviewCards overview={data.overview} />
-                
+
+                {/* 月度总结与资产对账 */}
                 {dimension === 'month' && (
                   <MonthlySummaryCard
                     dateRange={dateRange}
@@ -174,6 +177,7 @@ export default function DashboardPage() {
                   />
                 )}
 
+                {/* 统计图表 */}
                 <DashboardCharts
                   categoryData={data.categoryData || []}
                   flatCategories={flatCategories}

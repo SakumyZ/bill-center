@@ -59,13 +59,16 @@ export default function DashboardCharts({
     title: {
       text: drillDownParentId ? `${flatCategories.find(c => c.id === drillDownParentId)?.name} - 子分类占比` : '支出分类占比',
       left: 'center',
-      subtext: drillDownParentId ? '点击返回一级分类' : '点击分类查看子分类',
-      subtextStyle: { color: '#999', fontSize: 12 }
+      subtext: drillDownParentId ? '点击此处返回一级分类' : '点击图形分类查看子分类',
+      subtextStyle: { color: '#999', fontSize: 12 },
+      triggerEvent: true
     },
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
     series: [{
-      type: 'pie', radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
+      type: 'pie',
+      radius: ['35%', '60%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
       itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
       label: { show: true, formatter: '{b}\n{d}%' },
       data: getFilteredCategoryData()
@@ -114,23 +117,37 @@ export default function DashboardCharts({
 
   return (
     <>
-      <Row gutter={16} className="mb-6">
+      <Row gutter={16} className="my-6">
         <Col xs={24} lg={12}>
           <Card>
+            {/* 支出分类占比 */}
             <ReactEChartsCore
               option={categoryPieOption}
               style={{ height: 350 }}
               notMerge
               onEvents={{
                 click: (params: any) => {
-                  if (drillDownParentId === null) {
-                    const cid = params.data?.categoryId
-                    if (cid) {
-                      if (flatCategories.some(c => c.parentId === cid)) setDrillDownParentId(cid)
-                      else message.info('该分类没有子分类')
+                  // 如果点击的是标题/副标题，且处于下钻状态，则返回上级
+                  if (params.componentType === 'title') {
+                    if (drillDownParentId !== null) {
+                      setDrillDownParentId(null)
                     }
-                  } else {
-                    setDrillDownParentId(null)
+                    return
+                  }
+                  
+                  // 如果点击的是饼图扇区，且处于一级分类状态，则进入下钻
+                  if (params.componentType === 'series') {
+                    if (drillDownParentId === null) {
+                      const cid = params.data?.categoryId
+                      if (cid) {
+                        if (flatCategories.some(c => c.parentId === cid)) {
+                          setDrillDownParentId(cid)
+                        } else {
+                          message.info('该分类没有子分类')
+                        }
+                      }
+                    }
+                    // 如果已经处于下钻状态，点击扇区不再返回上级
                   }
                 }
               }}
@@ -138,27 +155,34 @@ export default function DashboardCharts({
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card><ReactEChartsCore option={trendLineOption} style={{ height: 350 }} notMerge /></Card>
+          <Card>
+            {/* 收支趋势 */}
+            <ReactEChartsCore option={trendLineOption} style={{ height: 350 }} notMerge />
+          </Card>
         </Col>
       </Row>
       {assetsTrend.length > 0 && (
         <Row gutter={16} className="mb-6">
           <Col span={24}>
             <Card className="rounded-xl border border-slate-100">
+              {/* 历史总资产走势 */}
               <ReactEChartsCore option={assetsTrendLineOption} style={{ height: 320 }} notMerge />
             </Card>
           </Col>
         </Row>
       )}
+      {/* 标签词云和 Top10 账单 */}
       <Row gutter={16} className="mb-6">
         <Col xs={24} lg={12} className="mb-6 lg:mb-0 min-w-0">
           <Card className="h-full">
             {tagCloud.length > 0 ? (
+              // 标签词云
               <ReactEChartsCore option={wordCloudOption} style={{ height: 350 }} notMerge />
             ) : <div className="h-[350px] flex items-center justify-center text-gray-400">暂无标签数据</div>}
           </Card>
         </Col>
         <Col xs={24} lg={12} className="min-w-0">
+          {/* Top10账单 */}
           {topBillsSlot}
         </Col>
       </Row>
